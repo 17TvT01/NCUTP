@@ -3,6 +3,7 @@ import torch.nn as nn
 from models.lung_segment import UNet
 import numpy as np
 import cv2
+import math
 
 class MiniUNet(nn.Module):
     """
@@ -31,6 +32,7 @@ def fallback_segmentation(patch_img_2d):
     """
     Sử dụng thuật toán xử lý ảnh cổ điển (Otsu Thresholding) + ConvexHull 
     để tạo liền mạch nốt phổi, tránh bị tách rời làm 2 đốm.
+    Tính toán thêm Diện Tích và Độ Tròn để chống nhiễu Mạch Máu/Xương.
     """
     # 0. Tăng cường độ tương phản (CLAHE)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
@@ -54,6 +56,11 @@ def fallback_segmentation(patch_img_2d):
     max_dist_allowed = max(h, w) * 0.40 # Lấy các mảnh vụn cách tâm Box không quá xa
     
     valid_points = []
+    
+    # Biến lưu trữ thông số Hình thái
+    morph_area = 0.0
+    morph_circularity = 0.0
+    
     if contours:
         for c in contours:
             # Bỏ mạt bụi quá nhỏ
@@ -75,5 +82,13 @@ def fallback_segmentation(patch_img_2d):
             valid_points = np.array(valid_points)
             hull = cv2.convexHull(valid_points)
             cv2.drawContours(final_mask, [hull], -1, 255, thickness=cv2.FILLED)
+            
+            # ĐO ĐẠC HÌNH THÁI HỌC CỦA KHỐI BAO NÀY
+            morph_area = cv2.contourArea(hull)
+            perimeter = cv2.arcLength(hull, True)
+            
+            if perimeter > 0:
+                 # Công thức tính độ tròn (1.0 là tròn tuyệt đối)
+                 morph_circularity = 4 * math.pi * morph_area / (perimeter * perimeter)
              
-    return final_mask > 0
+    return final_mask > 0, morph_area, morph_circularity

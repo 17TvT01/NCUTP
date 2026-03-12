@@ -28,6 +28,7 @@ data/
 dataset_yolo_1/
 dataset_yolo_2/
 dataset_yolo_final/
+*.npz
 
 # IDE
 .vscode/
