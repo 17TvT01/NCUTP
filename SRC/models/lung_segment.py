@@ -72,11 +72,24 @@ class UNet(nn.Module):
         out = self.out_conv(d1)
         return self.sigmoid(out)
 
+import os
+
 # Hàm khởi tạo hoặc nạp trọng số
 def load_unet_model(weights_path=None, device='cpu'):
     model = UNet()
-    if weights_path and torch.cuda.is_available():
-        pass # TODO: Viết logic nạp weights sau nếu có file .pt
+    
+    # Load Weights nếu có truyền đường dẫn và file tồn tại
+    if weights_path and os.path.exists(weights_path):
+        import traceback
+        try:
+            model.load_state_dict(torch.load(weights_path, map_location=device, weights_only=True))
+            print(f"🟢 Đã ráp não cho U-Net thành công từ: {weights_path}")
+        except Exception as e:
+            print(f"🔴 Lỗi khi ráp não U-Net: {e}")
+            traceback.print_exc()
+    else:
+        print(f"⚠️ U-Net đang chạy bằng bản năng gốc (Random Weights)! Không tìm thấy: {weights_path}")
+        
     model.to(device)
     model.eval() # Chế độ suy luận
     return model

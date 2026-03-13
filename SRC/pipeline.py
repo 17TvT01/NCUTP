@@ -12,7 +12,7 @@ import cv2
 class AIPipeline:
     def __init__(self, device='cpu'):
         self.device = torch.device(device) if isinstance(device, str) else device
-        self.unet_model = load_unet_model(device=self.device)
+        self.unet_model = load_unet_model(weights_path="weights/unet_best.pth", device=self.device)
         print("Đã tải module UNet Segmentation!")
         
         # Hàm __init__ khởi tạo tự động file YOLO weights
