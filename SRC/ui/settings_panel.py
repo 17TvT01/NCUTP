@@ -34,6 +34,12 @@ class SettingsPanel(ctk.CTkFrame):
         self.slider_fpr.set(0.50)
         self.slider_fpr.grid(row=2, column=1, padx=5, pady=6, sticky="ew")
 
+        # 4. Số lát cắt tối thiểu (Min Slices)
+        ctk.CTkLabel(content, text="Số lát cắt tối thiểu").grid(row=3, column=0, padx=5, pady=6, sticky="w")
+        self.entry_slices = ctk.CTkEntry(content, width=60)
+        self.entry_slices.insert(0, "3")
+        self.entry_slices.grid(row=3, column=1, padx=5, pady=6, sticky="w")
+
     def _on_conf_change(self, val):
         self.lbl_conf.configure(text=f"{val:.2f}")
 
@@ -49,3 +55,7 @@ class SettingsPanel(ctk.CTkFrame):
 
     def get_fpr_threshold(self):
         return self.slider_fpr.get()
+
+    def get_min_slices(self):
+        try: return int(self.entry_slices.get())
+        except: return 3

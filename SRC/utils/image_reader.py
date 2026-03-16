@@ -15,6 +15,11 @@ def _dicom_to_hu(dicom_data):
     Công thức: HU = pixel_value * RescaleSlope + RescaleIntercept
     """
     pixel_array = dicom_data.pixel_array.astype(np.float32)
+    
+    # Chuyển đổi RGB sang grayscale nếu ảnh có 3 kênh màu (shape: H, W, 3)
+    if len(pixel_array.shape) == 3 and pixel_array.shape[-1] == 3:
+        pixel_array = pixel_array[:, :, 0] * 0.299 + pixel_array[:, :, 1] * 0.587 + pixel_array[:, :, 2] * 0.114
+        
     slope = float(getattr(dicom_data, 'RescaleSlope', 1.0))
     intercept = float(getattr(dicom_data, 'RescaleIntercept', 0.0))
     hu_image = pixel_array * slope + intercept

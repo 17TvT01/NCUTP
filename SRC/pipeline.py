@@ -191,3 +191,5 @@ class AIPipeline:
             "message": f"Tìm thấy {len(final_nodules)} nốt phổi trên lát cắt."
         }
         return result
+
+

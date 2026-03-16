@@ -6,6 +6,8 @@ import numpy as np
 from utils.image_reader import load_dicom_series
 from pipeline import AIPipeline
 from ui.settings_panel import SettingsPanel
+from ui.result_tree import ResultTree
+from utils.cluster_3d import cluster_nodules_3d
 
 class AnalysisTab(ctk.CTkFrame):
     def __init__(self, master, **kwargs):
@@ -59,47 +61,27 @@ class AnalysisTab(ctk.CTkFrame):
         bot_frame.pack(fill="both", expand=True)
         bot_frame.columnconfigure((0,1), weight=1)
         bot_frame.rowconfigure(0, weight=1)
-
         # 3.1 BẢNG TREEVIEW
-        res_grp = ctk.CTkFrame(bot_frame, border_width=1, border_color="#555555", fg_color="#2b2b2b")
-        res_grp.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
-        ctk.CTkLabel(res_grp, text="Kết quả", text_color="#aaaaaa", font=("Segoe UI", 12)).pack(anchor="w", padx=10, pady=(5, 0))
-
-        res_content = ctk.CTkFrame(res_grp, fg_color="transparent")
-        res_content.pack(fill="both", expand=True, padx=10, pady=(2, 10))
-        
-        style = ttk.Style()
-        style.theme_use("default")
-        style.configure("Treeview", background="#2b2b2b", foreground="#cccccc", fieldbackground="#2b2b2b", borderwidth=0)
-        style.configure("Treeview.Heading", background="#333333", foreground="white", borderwidth=0)
-        style.map("Treeview", background=[("selected", "#1f538d")])
-
-        self.tree = ttk.Treeview(res_content, columns=("ID", "Voxel", "Z", "Y", "X", "Malig", "Color"), show="headings", height=15)
-        for col in self.tree["columns"]:
-            self.tree.heading(col, text=col)
-            self.tree.column(col, width=50, anchor="center")
-        self.tree.pack(fill="both", expand=True)
-        self.tree.bind('<<TreeviewSelect>>', self.on_tree_select)
-
+        self.result_tree = ResultTree(bot_frame, on_item_click_cb=self.go_to_slice)
+        self.result_tree.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
         # 3.2 HÌNH ẢNH
         img_frame = ctk.CTkFrame(bot_frame, fg_color="#2b2b2b", border_width=1, border_color="#555555")
         img_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
         
-        self.img_lbl = ctk.CTkLabel(img_frame, text="")
-        self.img_lbl.pack(fill="both", expand=True, padx=5, pady=5)
-        
-        # Lắng nghe sự kiện thay đổi kích thước khung ảnh để Responsive
-        img_frame.bind("<Configure>", self._on_img_frame_resize)
-        
         sld_frame = ctk.CTkFrame(img_frame, fg_color="transparent")
-        sld_frame.pack(fill="x", padx=10, pady=(0, 10))
+        sld_frame.pack(side="bottom", fill="x", padx=10, pady=(0, 10))
         self.lbl_slice = ctk.CTkLabel(sld_frame, text="Lát cắt: 0", width=80)
         self.lbl_slice.pack(side="left", padx=5)
         
         self.slider = ctk.CTkSlider(sld_frame, from_=0, to=1, command=self.on_slider)
         self.slider.pack(side="left", fill="x", expand=True, padx=5)
-        self.slider.set(0)
-        self.slider.configure(state="disabled")
+        self.slider.set(0); self.slider.configure(state="disabled")
+
+        self.img_lbl = ctk.CTkLabel(img_frame, text="")
+        self.img_lbl.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        # Lắng nghe sự kiện thay đổi kích thước khung ảnh để Responsive
+        img_frame.bind("<Configure>", self._on_img_frame_resize)
 
     def browse_dicom(self):
         d_path = filedialog.askdirectory(title="Chọn thư mục chứa DICOM")
@@ -115,8 +97,7 @@ class AnalysisTab(ctk.CTkFrame):
                 self.ct_images = imgs
                 self.slider.configure(state="normal", from_=0, to=len(imgs)-1, number_of_steps=len(imgs)-1)
                 self.slider.set(0); self.current_slice_index = 0
-                self.display_slice()
-                self.set_status(f"Đã tải {len(imgs)} lát cắt.", "white")
+                self.display_slice(); self.set_status(f"Đã tải {len(imgs)} lát cắt.", "white")
             else: self.set_status("Lỗi: Không có ảnh DICOM!", "red")
         except Exception as e: self.set_status(f"Lỗi: {e}", "red")
 
@@ -133,17 +114,10 @@ class AnalysisTab(ctk.CTkFrame):
         except Exception as e: self.set_status(f"Lỗi tải YOLO: {e}", "red")
 
     def on_slider(self, val):
-        if self.ct_images:
-            self.current_slice_index = int(val)
-            self.display_slice()
+        if self.ct_images: self.current_slice_index = int(val); self.display_slice()
 
-    def on_tree_select(self, event):
-        sel = self.tree.selection()
-        if not sel: return
-        vals = self.tree.item(sel[0])["values"]
-        if vals and 0 <= int(vals[2]) < len(self.ct_images):
-            self.slider.set(int(vals[2]))
-            self.on_slider(int(vals[2]))
+    def go_to_slice(self, z_idx):
+        if 0 <= z_idx < len(self.ct_images): self.slider.set(z_idx); self.on_slider(z_idx)
 
     def run_analysis(self):
         if not self.ct_images:
@@ -151,30 +125,45 @@ class AnalysisTab(ctk.CTkFrame):
             return
         self.set_status("Hệ thống đang phân tích AI...", "yellow")
         self.analysis_results = {}
-        [self.tree.delete(i) for i in self.tree.get_children()]
+        self.result_tree.clear()
         
-        total = 0; n_id = 1
+        total_slices = 0
         for i, img in enumerate(self.ct_images):
-            if i % 5 == 0: self.set_status(f"Đang xử lý {i+1}/{len(self.ct_images)}...")
+            if i % 10 == 0: 
+                self.set_status(f"Đang quét từng lát 2D: {i+1}/{len(self.ct_images)}...")
+                self.update_idletasks()
+            
             # Đọc tham số từ khung Thiết lập
             conf = self.settings.get_conf_threshold()
             voxel_min = self.settings.get_min_voxel()
             fpr_thresh = self.settings.get_fpr_threshold()
+            min_slices = self.settings.get_min_slices()
             res = self.ai_pipeline.run_full_pipeline(
                 img, full_volume=self.ct_images, slice_idx=i,
                 conf_threshold=conf, min_voxel=voxel_min, fpr_threshold=fpr_thresh
             )
             
             self.analysis_results[i] = res
-            for n in res.get("nodules", []):
-                # fpr_score sẽ mang tỷ lệ Cảnh Báo Ung Thư từ Mạng 3D
-                fpr_percent = f"{n.get('fpr_score', 1.0)*100:.1f}% AI3D" 
-                self.tree.insert("", "end", values=(n_id, n['voxel'], i, n['center_y'], n['center_x'], fpr_percent, "Red"))
-                n_id += 1
-                total += 1
+            total_slices += 1
+
+        # GOM CỤM KHÔNG GIAN 3D TỪ CÁC DẤU VẾT 2D RẢI RÁC TRÊN NHIỀU LÁT CẮT
+        self.set_status("Đang nhào nặn Không gian 3D (Clustering)...")
+        self.update_idletasks()
+        
+        clusters = cluster_nodules_3d(self.analysis_results, min_slices=min_slices)
+        
+        n_id = 1
+        for c in clusters:
+            fpr_percent = f"{c.get('fpr_score', 1.0)*100:.1f}% AI3D" 
+            
+            # Hiện Range "Lát 22-25" nếu nốt kéo dài, ngược lại hiện "Lát 22"
+            z_val = f"{c['z_start']}-{c['z_end']}" if c['z_start'] != c['z_end'] else str(c['z_start'])
+            
+            self.result_tree.add_item((n_id, c['voxel'], z_val, c['center_y'], c['center_x'], fpr_percent, "Red"))
+            n_id += 1
         
         self.display_slice()
-        self.set_status(f"Hoàn tất: Phát hiện {total} nốt.", "white")
+        self.set_status(f"Hoàn tất: Đã gộp thành {len(clusters)} Khối U 3D.", "white")
 
     def _get_display_size(self):
         """Tính kích thước ảnh vuông lớn nhất vừa vặn trong khung chứa."""
