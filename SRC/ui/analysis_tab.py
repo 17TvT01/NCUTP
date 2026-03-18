@@ -3,6 +3,7 @@ from tkinter import filedialog, ttk
 from PIL import Image
 import os
 import numpy as np
+import threading
 from utils.image_reader import load_dicom_series
 from pipeline import AIPipeline
 from ui.settings_panel import SettingsPanel
@@ -23,16 +24,22 @@ class AnalysisTab(ctk.CTkFrame):
         self.update_idletasks()
 
     def setup_ui(self):
-        # 0. KHUNG TRÊN CÙNG: Chia 2 cột (Nguồn dữ liệu | Thiết lập)
+        # 0. KHUNG TRÊN CÙNG: Chỉ có 1 cột
         top_frame = ctk.CTkFrame(self, fg_color="transparent")
         top_frame.pack(fill="x", pady=(5, 5))
-        top_frame.columnconfigure(0, weight=3)
-        top_frame.columnconfigure(1, weight=1)
+        top_frame.columnconfigure(0, weight=1)
 
-        # 1. NGUỒN DỮ LIỆU (Cột trái)
+        # 1. NGUỒN DỮ LIỆU
         data_grp = ctk.CTkFrame(top_frame, border_width=1, border_color="#555555", fg_color="#2b2b2b")
-        data_grp.grid(row=0, column=0, sticky="nsew", padx=(0, 5), ipadx=5, ipady=5)
-        ctk.CTkLabel(data_grp, text="Nguồn dữ liệu", text_color="#aaaaaa", font=("Segoe UI", 12)).pack(anchor="w", padx=10, pady=(5, 0))
+        data_grp.grid(row=0, column=0, sticky="nsew", padx=(0, 0), ipadx=5, ipady=5)
+        
+        header_frame = ctk.CTkFrame(data_grp, fg_color="transparent")
+        header_frame.pack(fill="x", padx=10, pady=(5, 0))
+        ctk.CTkLabel(header_frame, text="Nguồn dữ liệu", text_color="#aaaaaa", font=("Segoe UI", 12)).pack(side="left")
+        
+        self.settings = SettingsPanel(self)
+        ctk.CTkButton(header_frame, text="⚙ Cài đặt cấu hình AI", width=120, fg_color="#444", hover_color="#555", 
+                      command=self.settings.show_window).pack(side="right")
         data_content = ctk.CTkFrame(data_grp, fg_color="transparent")
         data_content.pack(fill="x", padx=10, pady=(2, 5))
         data_content.columnconfigure(1, weight=1)
@@ -47,9 +54,7 @@ class AnalysisTab(ctk.CTkFrame):
         self.entry_model.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
         ctk.CTkButton(data_content, text="Đổi Model AI...", width=100, command=self.browse_model).grid(row=1, column=2, padx=5, pady=5)
 
-        # 2. THIẾT LẬP (Cột phải)
-        self.settings = SettingsPanel(top_frame)
-        self.settings.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+        # 2. KHÔNG CÒN KHUNG THIẾT LẬP (Đã chuyển thành Cửa sổ riêng SettingsPanel)
 
         # 3. NÚT PHÂN TÍCH
         ctk.CTkButton(self, text="Phân tích", fg_color="#3b3b3b", hover_color="#4b4b4b", command=self.run_analysis).pack(fill="x", pady=10)
@@ -91,15 +96,24 @@ class AnalysisTab(ctk.CTkFrame):
         self.entry_dicom.configure(state="readonly")
         
         self.set_status(f"Đang đọc: {d_path}", "yellow")
-        try:
-            imgs = load_dicom_series(d_path, target_size=(512, 512))
-            if imgs:
-                self.ct_images = imgs
-                self.slider.configure(state="normal", from_=0, to=len(imgs)-1, number_of_steps=len(imgs)-1)
-                self.slider.set(0); self.current_slice_index = 0
-                self.display_slice(); self.set_status(f"Đã tải {len(imgs)} lát cắt.", "white")
-            else: self.set_status("Lỗi: Không có ảnh DICOM!", "red")
-        except Exception as e: self.set_status(f"Lỗi: {e}", "red")
+        
+        def _load_thread():
+            try:
+                imgs = load_dicom_series(d_path, target_size=(512, 512))
+                self.after(0, self._on_dicom_loaded, imgs)
+            except Exception as e:
+                self.after(0, self.set_status, f"Lỗi: {e}", "red")
+                
+        threading.Thread(target=_load_thread, daemon=True).start()
+
+    def _on_dicom_loaded(self, imgs):
+        if imgs:
+            self.ct_images = imgs
+            self.slider.configure(state="normal", from_=0, to=len(imgs)-1, number_of_steps=len(imgs)-1)
+            self.slider.set(0); self.current_slice_index = 0
+            self.display_slice(); self.set_status(f"Đã tải {len(imgs)} lát cắt.", "white")
+        else:
+            self.set_status("Lỗi: Không có ảnh DICOM!", "red")
 
     def browse_model(self):
         f_path = filedialog.askopenfilename(title="Chọn Model YOLO (.pt)", filetypes=[("PyTorch", "*.pt")])
@@ -107,11 +121,16 @@ class AnalysisTab(ctk.CTkFrame):
         self.entry_model.configure(state="normal")
         self.entry_model.delete(0, 'end'); self.entry_model.insert(0, os.path.basename(f_path))
         self.entry_model.configure(state="readonly")
-        try:
-            self.set_status("Đang tải YOLOv8 mới...", "yellow")
-            self.ai_pipeline.load_yolo_weights(f_path)
-            self.set_status(f"Đã tải {os.path.basename(f_path)}!", "#00ff00")
-        except Exception as e: self.set_status(f"Lỗi tải YOLO: {e}", "red")
+        
+        def _load_model_thread():
+            try:
+                self.after(0, self.set_status, "Đang tải YOLOv8 mới...", "yellow")
+                self.ai_pipeline.load_yolo_weights(f_path)
+                self.after(0, self.set_status, f"Đã tải {os.path.basename(f_path)}!", "#00ff00")
+            except Exception as e:
+                self.after(0, self.set_status, f"Lỗi tải YOLO: {e}", "red")
+
+        threading.Thread(target=_load_model_thread, daemon=True).start()
 
     def on_slider(self, val):
         if self.ct_images: self.current_slice_index = int(val); self.display_slice()
@@ -127,31 +146,39 @@ class AnalysisTab(ctk.CTkFrame):
         self.analysis_results = {}
         self.result_tree.clear()
         
-        total_slices = 0
-        for i, img in enumerate(self.ct_images):
-            if i % 10 == 0: 
-                self.set_status(f"Đang quét từng lát 2D: {i+1}/{len(self.ct_images)}...")
-                self.update_idletasks()
-            
-            # Đọc tham số từ khung Thiết lập
-            conf = self.settings.get_conf_threshold()
-            voxel_min = self.settings.get_min_voxel()
-            fpr_thresh = self.settings.get_fpr_threshold()
-            min_slices = self.settings.get_min_slices()
-            res = self.ai_pipeline.run_full_pipeline(
-                img, full_volume=self.ct_images, slice_idx=i,
-                conf_threshold=conf, min_voxel=voxel_min, fpr_threshold=fpr_thresh
-            )
-            
-            self.analysis_results[i] = res
-            total_slices += 1
+        self.slider.configure(state="disabled")
+        
+        conf = self.settings.get_conf_threshold()
+        voxel_min = self.settings.get_min_voxel()
+        fpr_thresh = self.settings.get_fpr_threshold()
+        min_slices = self.settings.get_min_slices()
 
-        # GOM CỤM KHÔNG GIAN 3D TỪ CÁC DẤU VẾT 2D RẢI RÁC TRÊN NHIỀU LÁT CẮT
-        self.set_status("Đang nhào nặn Không gian 3D (Clustering)...")
-        self.update_idletasks()
-        
-        clusters = cluster_nodules_3d(self.analysis_results, min_slices=min_slices)
-        
+        def _analysis_thread():
+            try:
+                total_slices = 0
+                for i, img in enumerate(self.ct_images):
+                    if i % 10 == 0: 
+                        self.after(0, self.set_status, f"Đang quét từng lát 2D: {i+1}/{len(self.ct_images)}...")
+                    
+                    res = self.ai_pipeline.run_full_pipeline(
+                        img, full_volume=self.ct_images, slice_idx=i,
+                        conf_threshold=conf, min_voxel=voxel_min, fpr_threshold=fpr_thresh
+                    )
+                    
+                    self.analysis_results[i] = res
+                    total_slices += 1
+
+                self.after(0, self.set_status, "Đang nhào nặn Không gian 3D (Clustering)...")
+                
+                clusters = cluster_nodules_3d(self.analysis_results, min_slices=min_slices)
+                
+                self.after(0, self._on_analysis_done, clusters)
+            except Exception as e:
+                self.after(0, self.set_status, f"Lỗi phân tích: {e}", "red")
+
+        threading.Thread(target=_analysis_thread, daemon=True).start()
+
+    def _on_analysis_done(self, clusters):
         n_id = 1
         for c in clusters:
             fpr_percent = f"{c.get('fpr_score', 1.0)*100:.1f}% AI3D" 
@@ -163,6 +190,7 @@ class AnalysisTab(ctk.CTkFrame):
             n_id += 1
         
         self.display_slice()
+        self.slider.configure(state="normal")
         self.set_status(f"Hoàn tất: Đã gộp thành {len(clusters)} Khối U 3D.", "white")
 
     def _get_display_size(self):

@@ -11,7 +11,13 @@ class LungNoduleApp(ctk.CTk):
         self.title("Lung Nodule Assistant")
         self.geometry("1100x750")
         self.minsize(900, 600)
-        self.after(100, lambda: self.state('zoomed'))  # Delay maximize sau khi UI render xong
+        
+        def maximize_window():
+            self.state('zoomed')
+            
+        # Tăng thời gian chờ lên để CustomTkinter hoàn tất các tính toán giao diện bên trong
+        # trước khi ép hệ điều hành phóng to cửa sổ
+        self.after(300, maximize_window)
         
         self.tabview = ctk.CTkTabview(self)
         self.tabview.pack(fill="both", expand=True, padx=15, pady=0)

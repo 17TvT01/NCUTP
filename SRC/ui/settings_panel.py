@@ -1,13 +1,23 @@
 import customtkinter as ctk
+import json
+import os
 
-class SettingsPanel(ctk.CTkFrame):
-    """Khung Thiết lập tham số AI - cho phép người dùng tùy chỉnh các ngưỡng lọc."""
+class SettingsPanel(ctk.CTkToplevel):
+    """Cửa sổ Thiết lập tham số AI - cho phép người dùng tùy chỉnh các ngưỡng lọc."""
     def __init__(self, master, **kwargs):
-        super().__init__(master, border_width=1, border_color="#555555", fg_color="#2b2b2b", **kwargs)
-        ctk.CTkLabel(self, text="Thiết lập", text_color="#aaaaaa", font=("Segoe UI", 12)).pack(anchor="w", padx=10, pady=(5, 0))
+        super().__init__(master, **kwargs)
+        self.title("Cài đặt cấu hình AI")
+        self.geometry("400x250")
+        self.resizable(False, False)
+        
+        self.settings_file = "settings.json"
+        
+        # Ẩn cửa sổ thay vì tắt khi nhấn X
+        self.protocol("WM_DELETE_WINDOW", self.hide_window)
+        self.withdraw()
         
         content = ctk.CTkFrame(self, fg_color="transparent")
-        content.pack(fill="both", expand=True, padx=10, pady=(2, 10))
+        content.pack(fill="both", expand=True, padx=20, pady=20)
         content.columnconfigure(1, weight=1)
 
         # 1. Ngưỡng xác suất YOLO (Confidence Threshold)
@@ -37,8 +47,43 @@ class SettingsPanel(ctk.CTkFrame):
         # 4. Số lát cắt tối thiểu (Min Slices)
         ctk.CTkLabel(content, text="Số lát cắt tối thiểu").grid(row=3, column=0, padx=5, pady=6, sticky="w")
         self.entry_slices = ctk.CTkEntry(content, width=60)
-        self.entry_slices.insert(0, "3")
         self.entry_slices.grid(row=3, column=1, padx=5, pady=6, sticky="w")
+        
+        self.load_settings()
+
+    def load_settings(self):
+        default_settings = {"conf": 0.25, "voxel": 50, "fpr": 0.50, "slices": 3}
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, "r") as f:
+                    settings = json.load(f)
+                    default_settings.update(settings)
+            except: pass
+            
+        self.slider_conf.set(default_settings["conf"])
+        self.lbl_conf.configure(text=f'{default_settings["conf"]:.2f}')
+        
+        self.entry_voxel.delete(0, 'end')
+        self.entry_voxel.insert(0, str(default_settings["voxel"]))
+        
+        self.slider_fpr.set(default_settings["fpr"])
+        self.lbl_fpr.configure(text=f'{default_settings["fpr"]:.2f}')
+        
+        self.entry_slices.delete(0, 'end')
+        self.entry_slices.insert(0, str(default_settings["slices"]))
+
+    def save_settings(self):
+        settings = {
+            "conf": self.get_conf_threshold(),
+            "voxel": self.get_min_voxel(),
+            "fpr": self.get_fpr_threshold(),
+            "slices": self.get_min_slices()
+        }
+        try:
+            with open(self.settings_file, "w") as f:
+                json.dump(settings, f, indent=4)
+        except Exception as e:
+            print(f"Lỗi lưu cài đặt: {e}")
 
     def _on_conf_change(self, val):
         self.lbl_conf.configure(text=f"{val:.2f}")
@@ -59,3 +104,11 @@ class SettingsPanel(ctk.CTkFrame):
     def get_min_slices(self):
         try: return int(self.entry_slices.get())
         except: return 3
+
+    def show_window(self):
+        self.deiconify()
+        self.focus()
+
+    def hide_window(self):
+        self.save_settings()
+        self.withdraw()
