@@ -1,13 +1,15 @@
 import cv2
 import numpy as np
 from typing import List, Dict, Optional
-from PyQt5.QtCore import Qt, QPoint, QRectF
+from PyQt5.QtCore import Qt, QPoint, QRectF, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import QLabel
 from .viewer_painter import draw_viewer_content
 
 class ImageViewer(QLabel):
     """Custom widget for displaying and annotating CT images. Focuses only on inputs/events."""
+
+    annotations_changed_sig = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -68,6 +70,7 @@ class ImageViewer(QLabel):
     def set_annotations(self, annotations: List[Dict]):
         self.annotations = annotations
         self.update_display()
+        self.annotations_changed_sig.emit()
 
     def set_draw_mode(self, mode: str):
         self.draw_mode = mode
@@ -151,12 +154,14 @@ class ImageViewer(QLabel):
                     self.annotations.append({"shape": "freehand", "points": [(p.x(), p.y()) for p in self.polygon_points]})
                 self.polygon_points = []
             self.update_display()
+            self.annotations_changed_sig.emit()
 
     def mouseDoubleClickEvent(self, event):
         if self.draw_mode == "polygon" and len(self.polygon_points) > 2:
             self.annotations.append({"shape": "polygon", "points": [(p.x(), p.y()) for p in self.polygon_points]})
             self.polygon_points, self.drawing = [], False
             self.update_display()
+            self.annotations_changed_sig.emit()
 
     def contextMenuEvent(self, event):
         self.mouseDoubleClickEvent(event)

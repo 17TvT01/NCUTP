@@ -8,14 +8,12 @@ from utils.image_reader import load_dicom_series
 from pipeline import AIPipeline
 from ui.settings_panel import SettingsPanel
 from ui.result_tree import ResultTree
+from ui.image_viewer import ImageViewer
 from utils.cluster_3d import cluster_nodules_3d
 
 class AnalysisTab(ctk.CTkFrame):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
-        self.ct_images = []
-        self.current_slice_index = 0
-        self.analysis_results = {}
         self.ai_pipeline = AIPipeline(device='cpu')
         self.setup_ui()
 
@@ -70,23 +68,8 @@ class AnalysisTab(ctk.CTkFrame):
         self.result_tree = ResultTree(bot_frame, on_item_click_cb=self.go_to_slice)
         self.result_tree.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
         # 3.2 HÌNH ẢNH
-        img_frame = ctk.CTkFrame(bot_frame, fg_color="#2b2b2b", border_width=1, border_color="#555555")
-        img_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
-        
-        sld_frame = ctk.CTkFrame(img_frame, fg_color="transparent")
-        sld_frame.pack(side="bottom", fill="x", padx=10, pady=(0, 10))
-        self.lbl_slice = ctk.CTkLabel(sld_frame, text="Lát cắt: 0", width=80)
-        self.lbl_slice.pack(side="left", padx=5)
-        
-        self.slider = ctk.CTkSlider(sld_frame, from_=0, to=1, command=self.on_slider)
-        self.slider.pack(side="left", fill="x", expand=True, padx=5)
-        self.slider.set(0); self.slider.configure(state="disabled")
-
-        self.img_lbl = ctk.CTkLabel(img_frame, text="")
-        self.img_lbl.pack(fill="both", expand=True, padx=5, pady=5)
-        
-        # Lắng nghe sự kiện thay đổi kích thước khung ảnh để Responsive
-        img_frame.bind("<Configure>", self._on_img_frame_resize)
+        self.image_viewer = ImageViewer(bot_frame, self.settings)
+        self.image_viewer.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
 
     def browse_dicom(self):
         d_path = filedialog.askdirectory(title="Chọn thư mục chứa DICOM")
@@ -108,10 +91,8 @@ class AnalysisTab(ctk.CTkFrame):
 
     def _on_dicom_loaded(self, imgs):
         if imgs:
-            self.ct_images = imgs
-            self.slider.configure(state="normal", from_=0, to=len(imgs)-1, number_of_steps=len(imgs)-1)
-            self.slider.set(0); self.current_slice_index = 0
-            self.display_slice(); self.set_status(f"Đã tải {len(imgs)} lát cắt.", "white")
+            self.image_viewer.set_images(imgs)
+            self.set_status(f"Đã tải {len(imgs)} lát cắt.", "white")
         else:
             self.set_status("Lỗi: Không có ảnh DICOM!", "red")
 
@@ -132,21 +113,18 @@ class AnalysisTab(ctk.CTkFrame):
 
         threading.Thread(target=_load_model_thread, daemon=True).start()
 
-    def on_slider(self, val):
-        if self.ct_images: self.current_slice_index = int(val); self.display_slice()
-
     def go_to_slice(self, z_idx):
-        if 0 <= z_idx < len(self.ct_images): self.slider.set(z_idx); self.on_slider(z_idx)
+        self.image_viewer.go_to_slice(z_idx)
 
     def run_analysis(self):
-        if not self.ct_images:
+        imgs = self.image_viewer.get_images()
+        if not imgs:
             self.set_status("Vui lòng tải DICOM trước.", "orange")
             return
         self.set_status("Hệ thống đang phân tích AI...", "yellow")
-        self.analysis_results = {}
+        self.image_viewer.analysis_results = {}
         self.result_tree.clear()
-        
-        self.slider.configure(state="disabled")
+        self.image_viewer.disable_slider()
         
         conf = self.settings.get_conf_threshold()
         voxel_min = self.settings.get_min_voxel()
@@ -156,21 +134,21 @@ class AnalysisTab(ctk.CTkFrame):
         def _analysis_thread():
             try:
                 total_slices = 0
-                for i, img in enumerate(self.ct_images):
+                for i, img in enumerate(imgs):
                     if i % 10 == 0: 
-                        self.after(0, self.set_status, f"Đang quét từng lát 2D: {i+1}/{len(self.ct_images)}...")
+                        self.after(0, self.set_status, f"Đang quét từng lát 2D: {i+1}/{len(imgs)}...")
                     
                     res = self.ai_pipeline.run_full_pipeline(
-                        img, full_volume=self.ct_images, slice_idx=i,
+                        img, full_volume=imgs, slice_idx=i,
                         conf_threshold=conf, min_voxel=voxel_min, fpr_threshold=fpr_thresh
                     )
                     
-                    self.analysis_results[i] = res
+                    self.image_viewer.update_analysis_result(i, res)
                     total_slices += 1
 
                 self.after(0, self.set_status, "Đang nhào nặn Không gian 3D (Clustering)...")
                 
-                clusters = cluster_nodules_3d(self.analysis_results, min_slices=min_slices)
+                clusters = cluster_nodules_3d(self.image_viewer.analysis_results, min_slices=min_slices)
                 
                 self.after(0, self._on_analysis_done, clusters)
             except Exception as e:
@@ -189,41 +167,6 @@ class AnalysisTab(ctk.CTkFrame):
             self.result_tree.add_item((n_id, c['voxel'], z_val, c['center_y'], c['center_x'], fpr_percent, "Red"))
             n_id += 1
         
-        self.display_slice()
-        self.slider.configure(state="normal")
+        self.image_viewer.display_slice()
+        self.image_viewer.enable_slider()
         self.set_status(f"Hoàn tất: Đã gộp thành {len(clusters)} Khối U 3D.", "white")
-
-    def _get_display_size(self):
-        """Tính kích thước ảnh vuông lớn nhất vừa vặn trong khung chứa."""
-        w = self.img_lbl.winfo_width()
-        h = self.img_lbl.winfo_height()
-        if w < 50 or h < 50:
-            return 350
-        size = max(200, min(w, h) - 60)
-        return min(size, 550)
-
-    def _on_img_frame_resize(self, event=None):
-        """Callback khi khung ảnh thay đổi kích thước -> vẽ lại ảnh."""
-        if self.ct_images:
-            self.display_slice()
-
-    def display_slice(self):
-        if not self.ct_images: return
-        img_orig = self.ct_images[self.current_slice_index]
-        if self.current_slice_index in self.analysis_results:
-            res = self.analysis_results[self.current_slice_index]
-            np_img = np.array(img_orig.convert("RGB"))
-            for n in res.get("nodules", []):
-                x1, y1, x2, y2 = n["x1"], n["y1"], n["x2"], n["y2"]
-                if n.get("fine_mask") is not None:
-                    roi = np_img[y1:y2, x1:x2]
-                    for c in range(3):
-                        roi[:,:,c] = np.where(n["fine_mask"], (0.5 * np.array([255,0,0])[c] + 0.5 * roi[:,:,c]).astype(np.uint8), roi[:,:,c])
-                    np_img[y1:y2, x1:x2] = roi
-            img_final = Image.fromarray(np_img)
-        else: img_final = img_orig.copy()
-        
-        # Tự động co giãn ảnh theo kích thước cửa sổ
-        display_size = self._get_display_size()
-        self.img_lbl.configure(image=ctk.CTkImage(light_image=img_final, dark_image=img_final, size=(display_size, display_size)), text="")
-        self.lbl_slice.configure(text=f"Lát cắt: {self.current_slice_index}")

@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSlider, QComboBox, QButtonGroup, QRadioButton, QListWidget
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSlider, QComboBox, QButtonGroup, QRadioButton, QListWidget, QListWidgetItem
 from PyQt5.QtCore import Qt, pyqtSignal
 
 class LeftPanel(QWidget):
@@ -10,6 +10,7 @@ class LeftPanel(QWidget):
     clear_slice_sig = pyqtSignal()
     save_annotations_sig = pyqtSignal()
     load_annotations_sig = pyqtSignal()
+    goto_marked_slice_sig = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -55,6 +56,14 @@ class LeftPanel(QWidget):
         self.annotation_list = QListWidget()
         layout.addWidget(self.annotation_list)
 
+        layout.addWidget(QLabel("All marked slices:"))
+        self.marked_slice_list = QListWidget()
+        layout.addWidget(self.marked_slice_list)
+
+        self.goto_marked_slice_btn = QPushButton("Go To Selected Marker")
+        self.goto_marked_slice_btn.clicked.connect(self.goto_marked_slice_sig.emit)
+        layout.addWidget(self.goto_marked_slice_btn)
+
         self.delete_btn = QPushButton("Delete Selected Annotation")
         self.delete_btn.clicked.connect(self.delete_annotation_sig.emit)
         layout.addWidget(self.delete_btn)
@@ -88,6 +97,24 @@ class LeftPanel(QWidget):
 
     def get_selected_annotation_index(self) -> int:
         return self.annotation_list.currentRow()
+
+    def update_marked_slice_list(self, marker_counts: dict, current_slice_idx: int):
+        self.marked_slice_list.clear()
+        for slice_idx in sorted(marker_counts.keys()):
+            count = marker_counts[slice_idx]
+            item_text = f"Slice {slice_idx + 1} ({count} annotations)"
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.UserRole, slice_idx)
+            if slice_idx == current_slice_idx:
+                item.setBackground(Qt.yellow)
+            self.marked_slice_list.addItem(item)
+
+    def get_selected_marked_slice_index(self) -> int:
+        item = self.marked_slice_list.currentItem()
+        if item is None:
+            return -1
+        value = item.data(Qt.UserRole)
+        return int(value) if value is not None else -1
         
     def set_instructions(self, text: str):
         self.tool_instruction.setText(text)

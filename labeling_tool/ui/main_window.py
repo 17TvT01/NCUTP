@@ -40,8 +40,10 @@ class LabelingApp(QMainWindow):
         self.left_panel.clear_slice_sig.connect(self.clear_slice)
         self.left_panel.save_annotations_sig.connect(self.save_annotations)
         self.left_panel.load_annotations_sig.connect(self.load_annotations)
+        self.left_panel.goto_marked_slice_sig.connect(self.go_to_selected_marker_slice)
         
         self.image_viewer = ImageViewer()
+        self.image_viewer.annotations_changed_sig.connect(self.on_viewer_annotations_changed)
         self.image_viewer.setAlignment(Qt.AlignCenter)
         self.image_viewer.setMinimumSize(400, 400)
         self.image_viewer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -53,9 +55,16 @@ class LabelingApp(QMainWindow):
         QShortcut(QKeySequence("Ctrl+S"), self, self.save_annotations)
         QShortcut(QKeySequence("Ctrl+O"), self, self.load_dicom_series)
         QShortcut(QKeySequence("Ctrl+Z"), self, self.undo_last_annotation)
-        QShortcut(QKeySequence(Qt.Key_Left), self, self.prev_slice)
-        QShortcut(QKeySequence(Qt.Key_Right), self, self.next_slice)
         QShortcut(QKeySequence(Qt.Key_Delete), self, self.delete_annotation)
+
+        # Keep references and force app-wide context so arrow keys work regardless of focused widget.
+        self.prev_slice_shortcut = QShortcut(QKeySequence(Qt.Key_Left), self)
+        self.prev_slice_shortcut.setContext(Qt.ApplicationShortcut)
+        self.prev_slice_shortcut.activated.connect(self.prev_slice)
+
+        self.next_slice_shortcut = QShortcut(QKeySequence(Qt.Key_Right), self)
+        self.next_slice_shortcut.setContext(Qt.ApplicationShortcut)
+        self.next_slice_shortcut.activated.connect(self.next_slice)
 
     def load_dicom_series(self):
         folder = QFileDialog.getExistingDirectory(self, "Select DICOM Series Folder")
@@ -84,6 +93,7 @@ class LabelingApp(QMainWindow):
         self.image_viewer.set_annotations(curr_anns)
         self.left_panel.slice_label.setText(f"Slice: {self.current_slice_idx + 1}/{len(self.dicom_files)}")
         self.update_annotation_list()
+        self.update_marked_slice_list()
 
     def on_slice_changed(self, value: int):
         self.save_current_slice_annotations()
@@ -94,6 +104,8 @@ class LabelingApp(QMainWindow):
         if not self.image_viewer.annotations:
             if self.current_slice_idx in self.labels:
                 del self.labels[self.current_slice_idx]
+                self.update_marked_slice_list()
+                self.update_stats()
             return
 
         labels = []
@@ -102,7 +114,24 @@ class LabelingApp(QMainWindow):
             ann["label_type"] = self.current_label_type
             labels.append(NoduleLabel.from_dict(ann))
         self.labels[self.current_slice_idx] = labels
+        self.update_marked_slice_list()
         self.update_stats()
+
+    def on_viewer_annotations_changed(self):
+        self.save_current_slice_annotations()
+        self.update_annotation_list()
+
+    def update_marked_slice_list(self):
+        marker_counts = {slice_idx: len(lbls) for slice_idx, lbls in self.labels.items() if lbls}
+        self.left_panel.update_marked_slice_list(marker_counts, self.current_slice_idx)
+
+    def go_to_selected_marker_slice(self):
+        target_slice_idx = self.left_panel.get_selected_marked_slice_index()
+        if target_slice_idx < 0:
+            QMessageBox.information(self, "Info", "Please select a marked slice first")
+            return
+        self.save_current_slice_annotations()
+        self.left_panel.slice_slider.setValue(target_slice_idx)
 
     def set_draw_mode(self, mode: str):
         self.image_viewer.set_draw_mode(mode)
@@ -150,12 +179,15 @@ class LabelingApp(QMainWindow):
             self.image_viewer.annotations = []
             self.image_viewer.update_display()
             self.update_annotation_list()
+            self.update_marked_slice_list()
             self.update_stats()
 
     def undo_last_annotation(self):
         if self.image_viewer.annotations:
             self.image_viewer.annotations.pop()
             self.image_viewer.update_display()
+            self.save_current_slice_annotations()
+            self.update_annotation_list()
 
     def prev_slice(self):
         if self.current_slice_idx > 0:

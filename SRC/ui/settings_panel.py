@@ -49,10 +49,15 @@ class SettingsPanel(ctk.CTkToplevel):
         self.entry_slices = ctk.CTkEntry(content, width=60)
         self.entry_slices.grid(row=3, column=1, padx=5, pady=6, sticky="w")
         
+        # 5. Tô màu nốt phổi (Fill color)
+        ctk.CTkLabel(content, text="Tô màu nốt phổi").grid(row=4, column=0, padx=5, pady=6, sticky="w")
+        self.switch_fill = ctk.CTkSwitch(content, text="")
+        self.switch_fill.grid(row=4, column=1, padx=5, pady=6, sticky="w")
+        
         self.load_settings()
 
     def load_settings(self):
-        default_settings = {"conf": 0.25, "voxel": 50, "fpr": 0.50, "slices": 3}
+        default_settings = {"conf": 0.25, "voxel": 50, "fpr": 0.50, "slices": 3, "fill_color": True}
         if os.path.exists(self.settings_file):
             try:
                 with open(self.settings_file, "r") as f:
@@ -71,13 +76,19 @@ class SettingsPanel(ctk.CTkToplevel):
         
         self.entry_slices.delete(0, 'end')
         self.entry_slices.insert(0, str(default_settings["slices"]))
+        
+        if default_settings.get("fill_color", True):
+            self.switch_fill.select()
+        else:
+            self.switch_fill.deselect()
 
     def save_settings(self):
         settings = {
             "conf": self.get_conf_threshold(),
             "voxel": self.get_min_voxel(),
             "fpr": self.get_fpr_threshold(),
-            "slices": self.get_min_slices()
+            "slices": self.get_min_slices(),
+            "fill_color": self.get_fill_color_enabled()
         }
         try:
             with open(self.settings_file, "w") as f:
@@ -104,6 +115,9 @@ class SettingsPanel(ctk.CTkToplevel):
     def get_min_slices(self):
         try: return int(self.entry_slices.get())
         except: return 3
+        
+    def get_fill_color_enabled(self):
+        return bool(self.switch_fill.get())
 
     def show_window(self):
         self.deiconify()
