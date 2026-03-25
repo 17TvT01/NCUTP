@@ -66,19 +66,29 @@ sequenceDiagram
 
 ---
 
-## 4. Quá trình Huấn luyện YOLOv11 (Đai diện Minh họa)
+## 4. Biểu đồ Đánh giá chi tiết (YOLOv8 vs YOLOv11)
 
-Các biểu đồ dưới đây trích xuất từ quá trình YOLOv11 học đặc trưng trên tập Train nhằm làm tư liệu tham chiếu cho sự cải thiện của mô hình:
+Các biểu đồ dưới đây được trích xuất từ quá trình Validation của cả hai mô hình trên tập dữ liệu kiểm thử, giúp so sánh trực quan hiệu năng nhận diện:
 
+### 4.1. Confusion Matrix (Ma trận nhầm lẫn)
 > [!TIP]
-> **Confusion Matrix (Ma trận nhầm lẫn):** Giúp bạn nhìn thấy thuật toán đang nhầm lẫn Giữa Nốt (Nodule) và Hình nền (Background) ở mức độ nào.
+> Giúp phân tích tỷ lệ thuật toán nhận diện đúng Nốt (Nodule) và nhận diện sai Hình nền (Background). YOLOv8 có xu hướng ít nhận diện sai hơn, trong khi YOLOv11 nhạy nhưng dễ bắt nhầm rác hơn.
 
-![Confusion Matrix - YOLOv11](/d:/Tool-vibecode/NCS/runs_compare/train_yolov11/confusion_matrix.png)
+**YOLOv8 (best_yolo_medical.pt):**
+![Confusion Matrix - YOLOv8](../runs_compare/eval_v8/confusion_matrix.png)
 
+**YOLOv11:**
+![Confusion Matrix - YOLOv11](../runs_compare/train_yolov11/confusion_matrix.png)
+
+### 4.2. F1-Confidence Curve
 > [!TIP]
-> **F1-Confidence Curve:** Điểm giao nhau cao nhất của F1 thể hiện ngưỡng Confidence (Độ tin cậy) tốt nhất để Cắt box.
+> Điểm giao nhau cao nhất của đường cong F1 thể hiện điểm cân bằng tối ưu giữa độ chính xác (Precision) và tỷ lệ tìm thấy (Recall) của mô hình.
 
-![F1 Box Curve - YOLOv11](/d:/Tool-vibecode/NCS/runs_compare/train_yolov11/BoxF1_curve.png)
+**YOLOv8 (best_yolo_medical.pt):**
+![F1 Box Curve - YOLOv8](../runs_compare/eval_v8/BoxF1_curve.png)
+
+**YOLOv11:**
+![F1 Box Curve - YOLOv11](../runs_compare/train_yolov11/BoxF1_curve.png)
 
 ---
 
