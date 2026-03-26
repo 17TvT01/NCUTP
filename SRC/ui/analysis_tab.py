@@ -12,8 +12,12 @@ from ui.image_viewer import ImageViewer
 from utils.cluster_3d import cluster_nodules_3d
 
 class AnalysisTab(ctk.CTkFrame):
-    def __init__(self, master, **kwargs):
+    def __init__(self, master, on_images_loaded=None, on_results_ready=None, on_clusters_ready=None, on_fill_changed=None, **kwargs):
         super().__init__(master, **kwargs)
+        self.on_images_loaded = on_images_loaded
+        self.on_results_ready = on_results_ready
+        self.on_clusters_ready = on_clusters_ready
+        self.on_fill_changed = on_fill_changed
         self.ai_pipeline = AIPipeline(device='cpu')
         self.setup_ui()
 
@@ -35,7 +39,7 @@ class AnalysisTab(ctk.CTkFrame):
         header_frame.pack(fill="x", padx=10, pady=(5, 0))
         ctk.CTkLabel(header_frame, text="Nguồn dữ liệu", text_color="#aaaaaa", font=("Segoe UI", 12)).pack(side="left")
         
-        self.settings = SettingsPanel(self)
+        self.settings = SettingsPanel(self, on_model_changed=self._load_yolo_model)
         ctk.CTkButton(header_frame, text="⚙ Cài đặt cấu hình AI", width=120, fg_color="#444", hover_color="#555", 
                       command=self.settings.show_window).pack(side="right")
         data_content = ctk.CTkFrame(data_grp, fg_color="transparent")
@@ -45,12 +49,6 @@ class AnalysisTab(ctk.CTkFrame):
         self.entry_dicom = ctk.CTkEntry(data_content, state="readonly")
         self.entry_dicom.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
         ctk.CTkButton(data_content, text="Chọn Thư Mục...", width=100, command=self.browse_dicom).grid(row=0, column=2, padx=5, pady=5)
-        ctk.CTkLabel(data_content, text="Model (.pt)").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        self.entry_model = ctk.CTkEntry(data_content)
-        self.entry_model.insert(0, "yolov8n.pt")
-        self.entry_model.configure(state="readonly")
-        self.entry_model.grid(row=1, column=1, padx=10, pady=5, sticky="ew")
-        ctk.CTkButton(data_content, text="Đổi Model AI...", width=100, command=self.browse_model).grid(row=1, column=2, padx=5, pady=5)
 
         # 2. KHÔNG CÒN KHUNG THIẾT LẬP (Đã chuyển thành Cửa sổ riêng SettingsPanel)
 
@@ -92,17 +90,14 @@ class AnalysisTab(ctk.CTkFrame):
     def _on_dicom_loaded(self, imgs):
         if imgs:
             self.image_viewer.set_images(imgs)
+            if self.on_images_loaded:
+                self.on_images_loaded(imgs)
             self.set_status(f"Đã tải {len(imgs)} lát cắt.", "white")
         else:
             self.set_status("Lỗi: Không có ảnh DICOM!", "red")
 
-    def browse_model(self):
-        f_path = filedialog.askopenfilename(title="Chọn Model YOLO (.pt)", filetypes=[("PyTorch", "*.pt")])
-        if not f_path: return
-        self.entry_model.configure(state="normal")
-        self.entry_model.delete(0, 'end'); self.entry_model.insert(0, os.path.basename(f_path))
-        self.entry_model.configure(state="readonly")
-        
+    def _load_yolo_model(self, f_path):
+        import os
         def _load_model_thread():
             try:
                 self.after(0, self.set_status, "Đang tải YOLOv8 mới...", "yellow")
@@ -115,16 +110,29 @@ class AnalysisTab(ctk.CTkFrame):
 
     def go_to_slice(self, z_idx):
         self.image_viewer.go_to_slice(z_idx)
+        # Chuyển focus ra khỏi Treeview để tránh kẹt phím mũi tên
+        self.focus_set()
+
+    def step_slice(self, delta):
+        imgs = self.image_viewer.get_images()
+        if not imgs:
+            return
+        cur = self.image_viewer.current_slice_index
+        max_idx = len(imgs) - 1
+        next_idx = max(0, min(cur + int(delta), max_idx))
+        if next_idx != cur:
+            self.image_viewer.go_to_slice(next_idx)
 
     def run_analysis(self):
         imgs = self.image_viewer.get_images()
         if not imgs:
             self.set_status("Vui lòng tải DICOM trước.", "orange")
             return
+        if self.on_fill_changed:
+            self.on_fill_changed(self.settings.get_fill_color_enabled())
         self.set_status("Hệ thống đang phân tích AI...", "yellow")
         self.image_viewer.analysis_results = {}
         self.result_tree.clear()
-        self.image_viewer.disable_slider()
         
         conf = self.settings.get_conf_threshold()
         voxel_min = self.settings.get_min_voxel()
@@ -168,5 +176,8 @@ class AnalysisTab(ctk.CTkFrame):
             n_id += 1
         
         self.image_viewer.display_slice()
-        self.image_viewer.enable_slider()
+        if self.on_results_ready:
+            self.on_results_ready(self.image_viewer.analysis_results)
+        if self.on_clusters_ready:
+            self.on_clusters_ready(clusters)
         self.set_status(f"Hoàn tất: Đã gộp thành {len(clusters)} Khối U 3D.", "white")

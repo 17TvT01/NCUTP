@@ -29,6 +29,7 @@ Tài liệu này ghi lại toàn bộ cấu trúc thư mục của dự án và 
 │   │   └── fpr_3d_net.py   # Kiến trúc mạng Lightweight 3D CNN chống dương tính giả
 │   ├── ui/             # Thư mục chứa giao diện các Tab (chia nhỏ để tuân thủ quy tắc 200 dòng)
 │   │   ├── analysis_tab.py # Giao diện tab Phân tích DICOM và Hiển thị kết quả AI
+│   │   ├── compare_tab.py # Giao diện tab So sánh ảnh chưa đánh dấu và ảnh đã đánh dấu
 │   │   ├── settings_panel.py # Widget khung Thiết lập tham số AI (ngưỡng, voxel, FPR)
 │   │   └── training_tab.py # Giao diện tab Huấn luyện lại mô hình YOLO
 │   ├── utils/          # Chứa các hàm hỗ trợ (image_reader, prepocessing, postprocessing)
@@ -54,7 +55,7 @@ Thư mục gốc chứa mã nguồn. Các file trong này phải tuân thủ ngh
 * **`pipeline.py`**: Lõi nhận diện chính (Pipeline). Tích hợp U-Net (Lọc phổi), YOLO (Cắt nốt), Morphological Filter (Lọc Hình học) và 3D CNN (Hậu xử lý FPR loại rác).
 * **`train_fpr_3d.py`**: Script tích hợp chạy huấn luyện Mạng 3D CNN sử dụng AMP (Mixed Precision) giảm tải RAM.
 * **`models/`**: Thư mục chứa các module tải và chạy model. Nổi bật là `fpr_3d_net.py` (Mạng 3D siêu nhẹ).
-* **`ui/`**: Thư mục chứa các Component Giao diện người dùng. Phân tách `analysis_tab.py` và `training_tab.py` để file luôn ngắn gọn.
+* **`ui/`**: Thư mục chứa các Component Giao diện người dùng. Gồm `analysis_tab.py`, `training_tab.py` và `compare_tab.py` để tách rõ từng chức năng giao diện.
 * **`utils/`**: Thư mục chứa các file code hỗ trợ giải nén ảnh, trong đó `patch_extractor_3d.py` giúp cắt các hình vuông Voxel không gian 3 Chiều.
 * **`weights/`**: Thư mục dùng để chứa các file trọng số pre-trained tải từ trên mạng xuống.
 

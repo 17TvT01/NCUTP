@@ -16,8 +16,8 @@ class AIPipeline:
         print("Đã tải module UNet Segmentation!")
         
         # Hàm __init__ khởi tạo tự động file YOLO weights
-        self.yolo_detector = NoduleDetector(weights_path="yolov8n.pt", device=device)
-        print("Đã tải module YOLOv8n Detection!")
+        self.yolo_detector = NoduleDetector(weights_path="yolo11n.pt", device=device)
+        print("Đã tải module YOLO11n Detection!")
         
         # Hàm nạp Não Phân Loại 3 Chiều FPR
         self.fpr_model = Lightweight3DCNN().to(device)
@@ -38,7 +38,7 @@ class AIPipeline:
     def load_yolo_weights(self, weights_path):
         """Khởi tạo lại Detector khi người dùng đổi file weights mới (.pt)"""
         self.yolo_detector = NoduleDetector(weights_path=weights_path, device=self.device)
-        print(f"Đã tải mô hình YOLOv8 mới từ: {weights_path}")
+        print(f"Đã tải mô hình YOLO11 mới từ: {weights_path}")
 
     def preprocess_image(self, pil_image):
         # Resize về đúng input của U-Net (256x256 để mô hình chạy cực nhẹ)

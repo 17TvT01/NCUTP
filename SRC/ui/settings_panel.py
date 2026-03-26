@@ -4,10 +4,11 @@ import os
 
 class SettingsPanel(ctk.CTkToplevel):
     """Cửa sổ Thiết lập tham số AI - cho phép người dùng tùy chỉnh các ngưỡng lọc."""
-    def __init__(self, master, **kwargs):
+    def __init__(self, master, on_model_changed=None, **kwargs):
         super().__init__(master, **kwargs)
+        self.on_model_changed = on_model_changed
         self.title("Cài đặt cấu hình AI")
-        self.geometry("400x250")
+        self.geometry("400x350")
         self.resizable(False, False)
         
         self.settings_file = "settings.json"
@@ -20,44 +21,63 @@ class SettingsPanel(ctk.CTkToplevel):
         content.pack(fill="both", expand=True, padx=20, pady=20)
         content.columnconfigure(1, weight=1)
 
+        # 0. Model AI
+        from tkinter import filedialog
+        ctk.CTkLabel(content, text="Model YOLO AI").grid(row=0, column=0, padx=5, pady=6, sticky="w")
+        self.entry_model = ctk.CTkEntry(content, width=120)
+        self.entry_model.grid(row=0, column=1, padx=5, pady=6, sticky="ew")
+        ctk.CTkButton(content, text="Chọn...", width=60, command=self.browse_model).grid(row=0, column=2, padx=5, pady=6)
+
         # 1. Ngưỡng xác suất YOLO (Confidence Threshold)
-        ctk.CTkLabel(content, text="Ngưỡng xác suất").grid(row=0, column=0, padx=5, pady=6, sticky="w")
+        ctk.CTkLabel(content, text="Ngưỡng xác suất").grid(row=1, column=0, padx=5, pady=6, sticky="w")
         self.lbl_conf = ctk.CTkLabel(content, text="0.25", width=40)
-        self.lbl_conf.grid(row=0, column=2, padx=5, pady=6)
+        self.lbl_conf.grid(row=1, column=2, padx=5, pady=6)
         self.slider_conf = ctk.CTkSlider(content, from_=0.05, to=0.95, number_of_steps=90,
                                           command=self._on_conf_change)
         self.slider_conf.set(0.25)
-        self.slider_conf.grid(row=0, column=1, padx=5, pady=6, sticky="ew")
+        self.slider_conf.grid(row=1, column=1, padx=5, pady=6, sticky="ew")
 
         # 2. Voxel tối thiểu (Minimum Area Filter)
-        ctk.CTkLabel(content, text="Voxel tối thiểu").grid(row=1, column=0, padx=5, pady=6, sticky="w")
+        ctk.CTkLabel(content, text="Voxel tối thiểu").grid(row=2, column=0, padx=5, pady=6, sticky="w")
         self.entry_voxel = ctk.CTkEntry(content, width=60)
         self.entry_voxel.insert(0, "50")
-        self.entry_voxel.grid(row=1, column=1, padx=5, pady=6, sticky="w")
+        self.entry_voxel.grid(row=2, column=1, padx=5, pady=6, sticky="w")
 
         # 3. Ngưỡng FPR 3D (FPR Score Threshold)
-        ctk.CTkLabel(content, text="Ngưỡng FPR 3D").grid(row=2, column=0, padx=5, pady=6, sticky="w")
+        ctk.CTkLabel(content, text="Ngưỡng FPR 3D").grid(row=3, column=0, padx=5, pady=6, sticky="w")
         self.lbl_fpr = ctk.CTkLabel(content, text="0.50", width=40)
-        self.lbl_fpr.grid(row=2, column=2, padx=5, pady=6)
+        self.lbl_fpr.grid(row=3, column=2, padx=5, pady=6)
         self.slider_fpr = ctk.CTkSlider(content, from_=0.1, to=0.99, number_of_steps=89,
                                          command=self._on_fpr_change)
         self.slider_fpr.set(0.50)
-        self.slider_fpr.grid(row=2, column=1, padx=5, pady=6, sticky="ew")
+        self.slider_fpr.grid(row=3, column=1, padx=5, pady=6, sticky="ew")
 
         # 4. Số lát cắt tối thiểu (Min Slices)
-        ctk.CTkLabel(content, text="Số lát cắt tối thiểu").grid(row=3, column=0, padx=5, pady=6, sticky="w")
+        ctk.CTkLabel(content, text="Số lát cắt tối thiểu").grid(row=4, column=0, padx=5, pady=6, sticky="w")
         self.entry_slices = ctk.CTkEntry(content, width=60)
-        self.entry_slices.grid(row=3, column=1, padx=5, pady=6, sticky="w")
+        self.entry_slices.grid(row=4, column=1, padx=5, pady=6, sticky="w")
         
         # 5. Tô màu nốt phổi (Fill color)
-        ctk.CTkLabel(content, text="Tô màu nốt phổi").grid(row=4, column=0, padx=5, pady=6, sticky="w")
+        ctk.CTkLabel(content, text="Tô màu nốt phổi").grid(row=5, column=0, padx=5, pady=6, sticky="w")
         self.switch_fill = ctk.CTkSwitch(content, text="")
-        self.switch_fill.grid(row=4, column=1, padx=5, pady=6, sticky="w")
+        self.switch_fill.grid(row=5, column=1, padx=5, pady=6, sticky="w")
         
         self.load_settings()
 
+    def browse_model(self):
+        from tkinter import filedialog
+        f_path = filedialog.askopenfilename(title="Chọn Model YOLO (.pt)", filetypes=[("PyTorch", "*.pt")])
+        if not f_path: return
+        self.entry_model.configure(state="normal")
+        self.entry_model.delete(0, 'end')
+        self.entry_model.insert(0, f_path)
+        self.entry_model.configure(state="readonly")
+        self.save_settings()
+        if self.on_model_changed:
+            self.on_model_changed(f_path)
+
     def load_settings(self):
-        default_settings = {"conf": 0.25, "voxel": 50, "fpr": 0.50, "slices": 3, "fill_color": True}
+        default_settings = {"model_path": "yolo11n.pt", "conf": 0.25, "voxel": 50, "fpr": 0.50, "slices": 3, "fill_color": True}
         if os.path.exists(self.settings_file):
             try:
                 with open(self.settings_file, "r") as f:
@@ -65,6 +85,11 @@ class SettingsPanel(ctk.CTkToplevel):
                     default_settings.update(settings)
             except: pass
             
+        self.entry_model.configure(state="normal")
+        self.entry_model.delete(0, 'end')
+        self.entry_model.insert(0, default_settings["model_path"])
+        self.entry_model.configure(state="readonly")
+        
         self.slider_conf.set(default_settings["conf"])
         self.lbl_conf.configure(text=f'{default_settings["conf"]:.2f}')
         
@@ -81,9 +106,13 @@ class SettingsPanel(ctk.CTkToplevel):
             self.switch_fill.select()
         else:
             self.switch_fill.deselect()
+            
+        if self.on_model_changed and default_settings.get("model_path"):
+            self.on_model_changed(default_settings["model_path"])
 
     def save_settings(self):
         settings = {
+            "model_path": self.entry_model.get(),
             "conf": self.get_conf_threshold(),
             "voxel": self.get_min_voxel(),
             "fpr": self.get_fpr_threshold(),

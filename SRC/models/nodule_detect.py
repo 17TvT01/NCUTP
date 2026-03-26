@@ -3,16 +3,16 @@ import os
 
 class NoduleDetector:
     """
-    Sử dụng YOLOv8n (Bản nano nhẹ nhất của YOLOv8) để thực hiện Object Detection.
+    Sử dụng YOLO11n (Bản nano siêu phân giải & nhạy của YOLO11) để thực hiện Object Detection.
     Mô hình này sẽ nhận ảnh Đầu vào (ảnh gốc hoặc ảnh đã qua U-Net) và xuất ra 
     các Bounding Box (hộp giới hạn) nghi ngờ là Nốt phổi (Nodule).
     """
-    def __init__(self, weights_path="weights/yolov8n.pt", device='cpu'):
+    def __init__(self, weights_path="weights/yolo11n.pt", device='cpu'):
         self.device = device
         
-        # Nếu chưa có weights. YOLO sẽ tự động tải file yolov8n.pt về từ Internet
+        # Nếu chưa có weights. YOLO sẽ tự động tải file yolo11n.pt về từ Internet
         self.model = YOLO(weights_path)
-        print("Đã tải xong module YOLOv8n Nodule Detector!")
+        print("Đã tải xong module YOLO11n Nodule Detector!")
 
     def predict(self, pil_image, conf_threshold=0.25):
         """
@@ -21,7 +21,7 @@ class NoduleDetector:
         :param conf_threshold: Ngưỡng tự tin tối thiểu (0.25 = 25%)
         :return: Danh sách các nốt phát hiện được định dạng chuẩn
         """
-        # YOLOv8 hỗ trợ infer trực tiếp trên ảnh PIL Image
+        # YOLO11 hỗ trợ infer trực tiếp trên ảnh PIL Image
         # verbose=False để tránh in quá nhiều log làm ô nhiễm console
         results = self.model.predict(source=pil_image, conf=conf_threshold, device=self.device, verbose=False)
         

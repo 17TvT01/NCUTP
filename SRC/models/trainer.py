@@ -25,9 +25,9 @@ class YOLOTrainer:
 
     def _run_training_process(self):
         # 1. Khởi tạo model (Hoặc là model y tế pre-trained, hoặc model gốc siêu nhẹ)
-        self.log_callback("⚙️ Đang tải mô hình kiến trúc YOLOv8n...")
+        self.log_callback("⚙️ Đang tải mô hình kiến trúc YOLO11n...")
         try:
-            model = YOLO("yolov8n.pt") 
+            model = YOLO("yolo11n.pt") 
             
             self.log_callback(f"🚀 Bắt đầu quá trình Huấn luyện với Epochs={self.epochs}, Batch={self.batch_size}")
             self.log_callback("Vui lòng chờ... (Sẽ mất thời gian tùy thuộc vào cấu hình máy)\n")
