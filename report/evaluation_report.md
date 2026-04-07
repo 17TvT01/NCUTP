@@ -1,103 +1,72 @@
-# Báo cáo Đánh giá và So sánh Mô hình YOLOv8 vs YOLOv11
+# Báo cáo Đánh giá và So sánh Mô hình YOLOv11 (GPU 1 vs GPU 2)
 
-Tài liệu này trình bày phân tích chuyên sâu về hiệu suất của hai mô hình YOLO (v8 và v11) được huấn luyện trên hệ thống nhận diện nốt phổi Y tế (Medical Lung Nodule Detection).
+Tài liệu này trình bày phân tích chuyên sâu hiệu suất của **cùng một kiến trúc YOLOv11 (yolo11n)** nhưng được huấn luyện trên hai hệ thống phần cứng khác nhau (GPU và Batch Size khác nhau) đối với bài toán nhận diện nốt phổi Y tế.
 
 > [!NOTE]
-> Báo cáo này được tự động trích xuất dựa trên tập Validation sau quá trình huấn luyện bằng script đánh giá độc lập để đảm bảo tính khách quan.
+> Báo cáo này so sánh hiệu năng giữa mô hình `best.pt` (Huấn luyện với thiết lập GPU 1) và mô hình `runs_compare/train_yolov11/weights/best.pt` (Huấn luyện với thiết lập GPU 2). Cả hai đều được đánh giá khách quan lại trên cùng một tập dữ liệu Validation.
 
 ## 1. Thông số Đánh giá Kỹ thuật
-- **Kiến trúc so sánh:** YOLOv8 Nano vs YOLO11 Nano
-- **Kích thước ảnh đẩu vào (Image Size):** `640x640`
-- **Tập bộ số liệu:** `dataset_yolo_final/data.yaml`
+- **Kiến trúc:** YOLO11 Nano (`yolo11n.pt`)
+- **Mô hình 1 (Thiết lập GPU 1):** File trọng số gốc `best.pt`
+- **Mô hình 2 (Thiết lập GPU 2):** File trọng số `runs_compare/train_yolov11/weights/best.pt`
+- **Tập dữ liệu đích:** `dataset_yolo_final/data.yaml`
 
 ---
 
-## 2. Bảng Tổng hợp Chỉ số (Metrics)
+## 2. Bảng Tổng hợp Chỉ số tại Ngưỡng Tự động (Best F1)
 
-| Chỉ số Đánh giá | Ý nghĩa Y Tế | YOLOv8 | YOLOv11 | Lợi thế |
-| :--- | :--- | :---: | :---: | :---: |
-| **Precision (P)** | Tỷ lệ chẩn đoán đúng. Cao = ít báo động nhầm. | **83.56%** | 57.89% | **YOLOv8** (+25.67%) |
-| **Recall (R)** | Tỷ lệ tìm thấy nốt. Cao = ít bỏ sót bệnh nhân. | 32.00% | **44.00%** | **YOLOv11** (+12.00%) |
-| **mAP@50** | Độ tin cậy hộp bao chuẩn (IoU=0.5). | 52.29% | **56.79%** | **YOLOv11** (+4.50%) |
-| **mAP@50-95**| Độ bao quy mô khít của Bounding Box. | **43.51%** | 40.14% | **YOLOv8** (+3.37%) |
+| Chỉ số Đánh giá | Ý nghĩa Y Tế | YOLOv11 (GPU 1) | YOLOv11 (GPU 2) | Đánh giá Thay đổi |
+| :--- | :--- | :---: | :---: | :--- |
+| **Precision (P)** | Tỷ lệ chẩn đoán đúng (Càng cao càng ít báo nhầm). | **99.15%** | 57.89% | Bản **GPU 1 làm tốt sự chính xác cực kỳ cao**. Gần như không hề có báo động nhầm. |
+| **Recall (R)** | Tỷ lệ tìm thấy nốt (Càng cao càng ít bỏ sót bệnh). | 32.00% | **44.00%** | Bản **GPU 2 nhạy hơn hẳn** (+12.00%). Khắc phục được nhược điểm "bảo thủ" của GPU 1. |
+| **mAP@50** | Độ tin cậy tổng thể (IoU=0.5). | 50.75% | **56.79%** | Bản GPU 2 có sự phân phối tổng quan tốt hơn (+6.04%). |
+| **mAP@50-95**| Quy mô ôm sát của Bounding Box. | **43.14%** | 40.14% | Box của bản GPU 1 bao quanh nốt phổi chặt chẽ hơn. |
 
 ---
 
-## 3. Biểu đồ Trực quan So sánh (Mermaid & Plots)
+## 3. Thử nghiệm Cắt Ngưỡng Ép Buộc (Test với `conf=0.05`)
 
-### 3.1 Nhận diện Điểm mạnh/Yếu qua Sơ đồ
+Chúng ta đã tiến hành chạy lại tham số hàm `.val()` và chặn cứng tất cả các hộp có độ tin cậy thấp (Bằng cấu hình ép buộc `conf=0.05` thủ công). Kết quả cực kỳ bất ngờ:
 
-Sơ đồ dưới đây tóm tắt hành vi đặc tả của hai mô hình trên phương diện Y tế:
+| Chỉ số tại `conf=0.05` | YOLOv11 (GPU 1) | YOLOv11 (GPU 2) | Sự cố & Nhận định |
+| :--- | :---: | :---: | :--- |
+| **Precision (P)** | **100.0%** | 99.46% | Đều tăng gần cực đại. |
+| **Recall (R)** | 32.00% | **32.00%** | **SỤT GIẢM NGHIÊM TRỌNG Ở GPU 2!** |
+| **mAP50** | 66.00% | 62.16% | Tăng ảo do phân phối bị chặt đứt đuôi. |
+
+**Giải thích hiện tượng Cắt Ngưỡng (Threshold Pruning):**
+ Việc chúng ta ép `conf=0.05` thay vì để thuật toán tự dò tìm (Default) đã làm **GIẢM RECALL (độ nhạy)** của mô hình GPU 2 từ `44%` rớt thẳng cẳng xuống `32%`. 
+=> Điều này chứng minh rằng: Những nốt phổi vớt vát được giúp tăng Recall ở bản GPU 2 (Khoản 12% hơn biệt) chứa toàn các **hộp Bounding Box có độ tự tin mỏng manh (Conf từ 0.001 đến 0.049)**! Khi ta dùng kềm cắt nốt ở 0.05, ta đã vô tình vứt luôn cả những nốt ung thư mờ nhạt đó.
+
+---
+
+## 4. Biểu đồ So sánh Trade-off trực quan (Mermaid)
 
 ```mermaid
 graph TD
-    classDef v8 fill:#1f77b4,color:white;
-    classDef v11 fill:#ff7f0e,color:white;
-    classDef cons fill:#d62728,color:white;
-    classDef pros fill:#2ca02c,color:white;
+    classDef gpu1 fill:#1f77b4,color:white;
+    classDef gpu2 fill:#ff7f0e,color:white;
+    classDef attr fill:#2ca02c,color:white;
+    classDef warn fill:#d62728,color:white;
 
-    A[Bài toán Nhận diện Nốt Phổi] --> B(YOLOv8 Nano)
-    A --> C(YOLO11 Nano)
+    A[Khác biệt Hyperparameters <br>Batch Size / GPUs] --> B(YOLOv11 - GPU 1)
+    A --> C(YOLOv11 - GPU 2)
 
-    B:::v8 --> B1[Ưu điểm: Ít Nhiễu, vẽ chính xác]:::pros
-    B:::v8 --> B2[Nhược điểm: Rất Bảo Thủ, dễ Bỏ Sót bệnh]:::cons
+    B:::gpu1 --> B1[Precision Gần Tuyệt Đối: 99.15%]:::attr
+    B:::gpu1 --> B2[Cảnh báo: Sót nốt nghiêm trọng, R=32%]:::warn
 
-    C:::v11 --> C1[Ưu điểm: Độ Nhạy Cao, Tìm được nhiều nốt]:::pros
-    C:::v11 --> C2[Nhược điểm: Báo động nhầm nhiều, Bounding box lỏng]:::cons
-```
-
-### 3.2 Sơ đồ Luồng Đề xuất (Pipeline Tích hợp)
-
-Dựa vào việc YOLOv11 dễ dàng phát hiện ra nốt phổi (nhưng lẫn nhiều rác False Positives), chúng ta có thể kết hợp YOLOv11 với **Mạng 3D CNN (FPR)** để tạo ra một luồng xử lý tối ưu nhất:
-
-```mermaid
-sequenceDiagram
-    participant DICOM as Ảnh Gốc (DICOM)
-    participant YOLO as YOLOv11 (Phát hiện)
-    participant CNN as Mạng 3D CNN (Lọc Nhiễu)
-    participant RESULT as Kết quả Cuối
-    
-    DICOM->>YOLO: Đẩy ảnh lát cắt 2D (Slice)
-    Note over YOLO: YOLOv11 tìm được rất nhiều nốt<br>(Bao gồm Nốt Thật + Nhiễu rác)
-    YOLO->>CNN: Chuyển cụm tọa độ nghi ngờ (Voxel 3D)
-    Note over CNN: Mạng 3D thực hiện phân tích chiều sâu.<br>Loại bỏ các Mạch máu, Nhiễu xương
-    CNN->>RESULT: Trả về nốt phổi chính xác!
+    C:::gpu2 --> C1[Thiên về Độ nhạy: Recall 44.00%]:::attr
+    C:::gpu2 --> C2[Cảnh báo: Bắt nhầm nhiễu nhiều, P=57.89%]:::warn
 ```
 
 ---
 
-## 4. Biểu đồ Đánh giá chi tiết (YOLOv8 vs YOLOv11)
-
-Các biểu đồ dưới đây được trích xuất từ quá trình Validation của cả hai mô hình trên tập dữ liệu kiểm thử, giúp so sánh trực quan hiệu năng nhận diện:
-
-### 4.1. Confusion Matrix (Ma trận nhầm lẫn)
-> [!TIP]
-> Giúp phân tích tỷ lệ thuật toán nhận diện đúng Nốt (Nodule) và nhận diện sai Hình nền (Background). YOLOv8 có xu hướng ít nhận diện sai hơn, trong khi YOLOv11 nhạy nhưng dễ bắt nhầm rác hơn.
-
-**YOLOv8 (best_yolo_medical.pt):**
-![Confusion Matrix - YOLOv8](../runs_compare/eval_v8/confusion_matrix.png)
-
-**YOLOv11:**
-![Confusion Matrix - YOLOv11](../runs_compare/train_yolov11/confusion_matrix.png)
-
-### 4.2. F1-Confidence Curve
-> [!TIP]
-> Điểm giao nhau cao nhất của đường cong F1 thể hiện điểm cân bằng tối ưu giữa độ chính xác (Precision) và tỷ lệ tìm thấy (Recall) của mô hình.
-
-**YOLOv8 (best_yolo_medical.pt):**
-![F1 Box Curve - YOLOv8](../runs_compare/eval_v8/BoxF1_curve.png)
-
-**YOLOv11:**
-![F1 Box Curve - YOLOv11](../runs_compare/train_yolov11/BoxF1_curve.png)
-
----
-
-## 5. Kết luận Chung & Khuyến nghị
+## 5. Kết luận & Quyết định Sử dụng
 
 > [!IMPORTANT]
-> **Khuyến cáo Triển khai (Deployment):** Việc lựa chọn mô hình nào phụ thuộc hoàn toàn vào kiến trúc hệ thống hiện tại của dự án NCS.
+> **Khuyến cáo Triển khai Tích hợp PipeLine:** Bạn nên hiểu rõ vai trò của YOLO trong hệ thống AI của bạn trước khi chọn.
 
-1. **Sử dụng YOLOv8 khi:** 
-   Bạn chỉ có duy nhất YOLO để chạy độc lập. Với Precision 83.56%, nó sẽ hiển thị rất ít kết quả bị sai, không gây hoang mang cho bác sĩ (đổi lại tỷ lệ sót bệnh nhân cao).
-2. **Sử dụng YOLOv11 khi (Được Đề Xuất cao):**
-   App NCS của bạn đã tích hợp sẵn nhánh 3D CNN lọc nhiễu FPR (`src/train_fpr_3d.py`). Lúc này YOLOv11 sẽ phát huy tối đa sức mạnh "bắt nhầm còn hơn bỏ sót" của nó. Mọi nốt phổi sẽ được lùa vào cho mạng 3D kiểm tra lại lần cuối.
+1. **CHỌN YOLOv11 - GPU 1 (best.pt gốc) MÀ KHÔNG CẦN SUY NGHĨ:** 
+   Nếu Pipeline của bạn dừng lại ở việc chỉ sử dụng YOLO để phát hiện và trực tiếp đưa ra cho Bác sĩ xem, không qua lưới lọc nào khác. Độ chính xác 99.15% sẽ khiến trải nghiệm người dùng tuyệt vời dù họ biết vẫn có sót.
+2. **CHỌN YOLOv11 - GPU 2 (Bản mới) KHI VÀ CHỈ KHI:**
+   Hệ thống của bạn có chạy module `pipeline.py` với mạng `3D CNN` hay `Morphological Filter` phía sau. Mạng YOLO bản mới lùa được rất nhiều vùng nghi ngờ (Recall 44%), sau đó các thuật toán 3D ở phần sau sẽ có đủ dữ liệu để thanh lọc rác, mang lại kết quả cuối cùng tuyệt đỉnh. Đặc biệt: **Khi Inference (Chạy tool), TẠI ĐÓ CHẮC CHẮN PHẢI SET `CONF=<0.04` CHO YOLO11 CHỨ KHÔNG ĐƯỢC ĐỂ `0.05` nhé.**
