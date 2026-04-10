@@ -6,6 +6,7 @@ import cv2
 import yaml
 import numpy as np
 import pydicom
+from utils.lung_mask_generator import generate_lung_mask
 
 try:
     import albumentations as A
@@ -64,6 +65,8 @@ def convert_dicom_to_cv2(dcm_path):
     if 'RescaleSlope' in ds and 'RescaleIntercept' in ds:
         pixel_array = pixel_array * ds.RescaleSlope + ds.RescaleIntercept
         
+    hu_image = pixel_array.copy()
+        
     # Áp dụng Windowing cứng cho phổi (W: 1500, L: -600)
     window_center = -600
     window_width = 1500
@@ -71,12 +74,39 @@ def convert_dicom_to_cv2(dcm_path):
     img_min = window_center - window_width // 2
     img_max = window_center + window_width // 2
     
+    # 1. Tìm Bounding Box Phổi từ cấu trúc HU chưa xử lý window
+    try:
+        mask = generate_lung_mask(hu_image) # hu_image là pixel_array bảo toàn âm
+        coords = cv2.findNonZero(mask)
+        if coords is not None:
+            x, y, w, h = cv2.boundingRect(coords)
+            pad = 20
+            h_img, w_img = pixel_array.shape
+            lung_xmin = max(0, x - pad)
+            lung_ymin = max(0, y - pad)
+            lung_xmax = min(w_img, x + w + pad)
+            lung_ymax = min(h_img, y + h + pad)
+            binary_mask = (mask > 127).astype(float)
+        else:
+            lung_xmin, lung_ymin, lung_xmax, lung_ymax = 0, 0, pixel_array.shape[1], pixel_array.shape[0]
+            binary_mask = np.ones_like(pixel_array)
+    except:
+        lung_xmin, lung_ymin, lung_xmax, lung_ymax = 0, 0, pixel_array.shape[1], pixel_array.shape[0]
+        binary_mask = np.ones_like(pixel_array)
+
+    # 2. Windowing
     pixel_array = np.clip(pixel_array, img_min, img_max)
     pixel_array = (pixel_array - img_min) / window_width * 255.0
     
+    # 3. Áp Mask Đen Trắng xóa xương
+    pixel_array = pixel_array * binary_mask
+    
     img_8bit = pixel_array.astype(np.uint8)
     img_rgb = cv2.cvtColor(img_8bit, cv2.COLOR_GRAY2RGB)
-    return img_rgb, sop_uid
+    
+    # 4. Crop Zoom
+    cropped_img = img_rgb[lung_ymin:lung_ymax, lung_xmin:lung_xmax]
+    return cropped_img, sop_uid, (lung_xmin, lung_ymin, lung_xmax, lung_ymax)
 
 def create_dataset(image_dir, xml_dir, output_dir, classes=["nodule"], augment_factor=5, split_ratio=0.8):
     """
@@ -135,7 +165,7 @@ def create_dataset(image_dir, xml_dir, output_dir, classes=["nodule"], augment_f
             base_name = f"{subset}_{random_id}_{os.path.splitext(file)[0]}"
             
             try:
-                img, sop_uid = convert_dicom_to_cv2(img_path)
+                img, sop_uid, lung_box = convert_dicom_to_cv2(img_path)
             except Exception as e:
                 continue
                 
@@ -143,8 +173,31 @@ def create_dataset(image_dir, xml_dir, output_dir, classes=["nodule"], augment_f
             if sop_uid not in master_sop_map:
                 continue
                 
-            bboxes = master_sop_map[sop_uid]
-            class_labels = [0] * len(bboxes) # Class = 0 (Nodule)
+            bboxes_raw = master_sop_map[sop_uid]
+            lung_xmin, lung_ymin, lung_xmax, lung_ymax = lung_box
+            
+            valid_bboxes = []
+            for b in bboxes_raw:
+                b_xmin, b_ymin, b_xmax, b_ymax = b
+                # Dịch chuyển tọa độ
+                new_xmin = b_xmin - lung_xmin
+                new_ymin = b_ymin - lung_ymin
+                new_xmax = b_xmax - lung_xmin
+                new_ymax = b_ymax - lung_ymin
+                
+                # Kẹp giới hạn nếu nốt nằm le lói ở viền crop
+                new_xmin = max(0, new_xmin)
+                new_ymin = max(0, new_ymin)
+                new_xmax = min(img.shape[1], new_xmax)
+                new_ymax = min(img.shape[0], new_ymax)
+                
+                if new_xmax > new_xmin and new_ymax > new_ymin:
+                    valid_bboxes.append([new_xmin, new_ymin, new_xmax, new_ymax])
+                    
+            if len(valid_bboxes) == 0:
+                continue
+                
+            class_labels = [0] * len(valid_bboxes) # Class = 0 (Nodule)
             
             def save_sample(image, box_list, label_list, img_name, is_val=False):
                 nonlocal generated_count
@@ -161,14 +214,14 @@ def create_dataset(image_dir, xml_dir, output_dir, classes=["nodule"], augment_f
                 generated_count += 1
 
             # Lưu ảnh Gốc
-            save_sample(img, bboxes, class_labels, base_name, is_val=(subset=='val'))
+            save_sample(img, valid_bboxes, class_labels, base_name, is_val=(subset=='val'))
             processed_count += 1
             
             # Tăng cường dữ liệu
             if subset == 'train' and aug_pipeline is not None:
                 for idx in range(1, augment_factor):
                     try:
-                        augmented = aug_pipeline(image=img, bboxes=bboxes, class_labels=class_labels)
+                        augmented = aug_pipeline(image=img, bboxes=valid_bboxes, class_labels=class_labels)
                         if len(augmented['bboxes']) > 0:
                             save_sample(augmented['image'], augmented['bboxes'], augmented['class_labels'], f"{base_name}_aug_{idx}")
                     except Exception as e:
@@ -179,7 +232,7 @@ def create_dataset(image_dir, xml_dir, output_dir, classes=["nodule"], augment_f
     
     # 4. Tạo file data.yaml
     yaml_content = {
-        'path': os.path.abspath(output_dir),
+        'path': '.',
         'train': 'images/train',
         'val': 'images/val',
         'nc': len(classes),

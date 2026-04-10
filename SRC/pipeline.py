@@ -66,14 +66,48 @@ class AIPipeline:
         # Lấy mask nhị phân từ U-Net
         lung_mask = self.predict_lung_mask(img_tensor)
         
-        # Áp dụng Mask phổi (tạm thời lấp đầy để demo U-Net, do U-net siêu nhẹ hiện tại chưa đủ chuẩn, ta sẽ dùng numpy resize mask)
+        # Áp dụng Mask phổi bằng cv2
         mask_resized = cv2.resize(lung_mask.astype(np.uint8), original_size)
         
-        # 3. Bước 2: YOLO Detection (Cắt Nodule)
-        nodules_raw = self.yolo_detector.predict(pil_image, conf_threshold=conf_threshold)
+        # 3. Bước Trυng gian: Cắt & Zoom vυng phổi dẫy nhiễu xųơnĝ
+        # Tὶm khung viền chứɑ 2 lá phổi (với đệm an tοàn 20px)
+        mask_255 = (mask_resized * 255).astype(np.uint8) if mask_resized.max() <= 1 else mask_resized
+        coords = cv2.findNonZero(mask_255)
+        if coords is not None:
+            x, y, w, h = cv2.boundingRect(coords)
+            pad = 20
+            lung_xmin = max(0, x - pad)
+            lung_ymin = max(0, y - pad)
+            lung_xmax = min(original_size[0], x + w + pad)
+            lung_ymax = min(original_size[1], y + h + pad)
+        else:
+            lung_xmin, lung_ymin, lung_xmax, lung_ymax = 0, 0, original_size[0], original_size[1]
+            
+        # Áp dụng Mask đen trắng lên PIL Image để xử lý triệt để nền
+        cv_img_original = np.array(pil_image)
+        # Tạo mask nhị phân 0-1
+        binary_mask = (mask_255 > 127).astype(np.uint8)
+        masked_img = cv_img_original * binary_mask
+        
+        # Cắt (Crop) phần ảnh trυng tâm màng phổi
+        cropped_img_np = masked_img[lung_ymin:lung_ymax, lung_xmin:lung_xmax]
+        cropped_pil_image = Image.fromarray(cropped_img_np)
+        
+        # 3. Bước 2: YOLO Detection (Cắt Nodule trên ảnh đã phỏng tσ/crop)
+        nodules_raw = self.yolo_detector.predict(cropped_pil_image, conf_threshold=conf_threshold)
         
         # BỘ LỌC CHẶN BUÔNG (Phòng trường hợp YOLO phớt lờ tham số conf)
-        safe_nodules = [n for n in nodules_raw if n['confidence'] >= conf_threshold]
+        safe_nodules = []
+        for n in nodules_raw:
+            if n['confidence'] >= conf_threshold:
+                # Cộng ngượс tọɑ độ từ khunɡ сắt trả về ảnħ gốc
+                n['x1'] += lung_xmin
+                n['x2'] += lung_xmin
+                n['y1'] += lung_ymin
+                n['y2'] += lung_ymin
+                n['center_x'] += lung_xmin
+                n['center_y'] += lung_ymin
+                safe_nodules.append(n)
         
         # Sắp xếp các nốt tìm được theo độ tin cậy (Confidence) giảm dần
         safe_nodules = sorted(safe_nodules, key=lambda x: x['confidence'], reverse=True)

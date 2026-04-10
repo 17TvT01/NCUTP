@@ -23,7 +23,7 @@ def train_model(version, data_yaml, epochs, batch_size, imgsz):
     print(f"⚙️ Khởi tạo mô hình kiến trúc: {model_name}...")
     model = YOLO(model_name)
     
-    # Tiến hành Huấn luyện
+    # Tiến hành Huấn luyện (Chạy trên Server với cấu hình cực đoan để bắt nốt nhỏ)
     results = model.train(
         data=data_yaml,
         epochs=epochs,
@@ -33,7 +33,16 @@ def train_model(version, data_yaml, epochs, batch_size, imgsz):
         project=os.path.abspath('runs_compare'), # Tách riêng ra thư mục runs_compare
         name=f'train_yolo{version}',
         plots=True,          # Tạo biểu đồ để tiện so sánh
-        verbose=True
+        verbose=True,
+        workers=8,           # Đa luồng Server để load ảnh
+
+        # --- CÁC THAM SỐ GÂY ĐỘT BIẾN Y TẾ ---
+        mosaic=1.0,  
+        mixup=0.1,
+        box=10.0,
+        cls=2.0,
+        fliplr=0.0,  # Không lật ngang đối với Phổi
+        flipud=0.0   # Không lật dọc
     )
     
     print(f"\n✅ Hoàn tất huấn luyện YOLO{version}.")
@@ -41,15 +50,15 @@ def train_model(version, data_yaml, epochs, batch_size, imgsz):
     print(f"🎯 Trọng số tốt nhất đã được lưu tại:\n👉 {best_weight}\n")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Công cụ huấn luyện độc lập để so sánh YOLOv8 và YOLO11")
+    parser = argparse.ArgumentParser(description="Công cụ huấn luyện YOLO độc lập (Hỗ trợ cấu hình chạy Server)")
     parser.add_argument('--version', type=str, choices=['v8', 'v11', 'both'], default='both', 
                         help="Chọn phiên bản YOLO để huấn luyện (v8, v11, hoặc both để chạy tuần tự)")
     # Mặc định đường dẫn file YAML đang nằm trong thư mục dataset_yolo_final theo như cấu trúc của bạn
     parser.add_argument('--data', type=str, default='dataset_yolo_final/data.yaml', 
                         help="Đường dẫn tương đối/tuyệt đối đến file cấu hình dataset (.yaml)")
-    parser.add_argument('--epochs', type=int, default=50, help="Số lượng epochs để huấn luyện")
-    parser.add_argument('--batch', type=int, default=8, help="Kích thước batch size")
-    parser.add_argument('--imgsz', type=int, default=640, help="Kích thước ảnh đầu vào")
+    parser.add_argument('--epochs', type=int, default=100, help="Số lượng epochs để huấn luyện (Nên để 300 nếu chạy Server)")
+    parser.add_argument('--batch', type=int, default=8, help="Kích thước batch size (Nên dùng 16 hoặc 32 cho Server)")
+    parser.add_argument('--imgsz', type=int, default=640, help="Kích thước ảnh đầu vào (Khuyến nghị 1024 trên Server)")
 
     args = parser.parse_args()
 

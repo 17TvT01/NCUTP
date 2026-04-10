@@ -28,6 +28,7 @@ data/
 dataset_yolo_1/
 dataset_yolo_2/
 dataset_yolo_final/
+dataset_yolo_zoomed/
 *.npz
 
 # IDE
