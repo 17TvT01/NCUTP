@@ -55,10 +55,26 @@ Thư mục gốc chứa mã nguồn. Các file trong này phải tuân thủ ngh
 * **`main.py`**: Chứa giao diện chính (khung Window CustomTkinter) và import các giao diện con (Tab).
 * **`pipeline.py`**: Lõi nhận diện chính (Pipeline). Tích hợp U-Net (Lọc phổi), YOLO (Cắt nốt), Morphological Filter (Lọc Hình học) và 3D CNN (Hậu xử lý FPR loại rác).
 * **`train_fpr_3d.py`**: Script tích hợp chạy huấn luyện Mạng 3D CNN sử dụng AMP (Mixed Precision) giảm tải RAM.
-* **`data_prep_app.py`**: Giao diện Độc lập (Standalone UI) giúp tự động quét nhiều folder DICOM/XML để sinh và tăng cường dữ liệu huấn luyện YOLO hàng loạt.
-* **`models/`**: Thư mục chứa các module tải và chạy model. Nổi bật là `fpr_3d_net.py` (Mạng 3D siêu nhẹ).
-* **`ui/`**: Thư mục chứa các Component Giao diện người dùng. Gồm `analysis_tab.py`, `training_tab.py` và `compare_tab.py` để tách rõ từng chức năng giao diện.
-* **`utils/`**: Thư mục chứa các file code hỗ trợ giải nén ảnh, trong đó `patch_extractor_3d.py` giúp cắt các hình vuông Voxel không gian 3 Chiều.
+* **`train_unet.py`**: Script huấn luyện mạng liên quan việc tạo mask (chẳng hạn U-Net).
+* **`train_compare_yolo.py`**: Script huấn luyện, so sánh YOLO (ví dụ giữa v8 và v11) và đánh giá chi tiết (Recall, mAP).
+* **`data_prep_app.py`**: Giao diện Độc lập (Standalone UI) giúp tự động quét nhiều folder DICOM/XML để sinh và tăng cường dữ liệu huấn luyện hàng loạt.
+* **`data_prep_cli.py`**: Công cụ chạy bằng dòng lệnh (CLI) dùng cho việc build và load dữ liệu tự động.
+* **`models/`**: Thư mục chứa logic khởi tạo và inference cho các model:
+  * `fpr_3d_net.py`: Mạng 3D CNN siêu nhẹ chống False Positives.
+  * `lung_segment.py`: Cơ chế load model nhận diện màng phổi.
+  * `nodule_detect.py`: Code bọc cho phần load model YOLO nhận diện nốt.
+  * `nodule_segment.py`: Module hỗ trợ phân vùng chi tiết nốt phổi.
+  * `trainer.py`: Chứa class/trainer để huấn luyện (để tái sử dụng loop train chung).
+* **`ui/`**: Thư mục component UI:
+  * Gồm nhiều tab chính như `analysis_tab.py`, `compare_tab.py`, `settings_panel.py`, `training_tab.py`.
+  * `image_viewer.py`: Thành phần hiển thị hình ảnh Dicom / Render kết quả.
+  * `result_tree.py`: Bảng hiển thị danh sách các nốt phát hiện được ở dạng TreeView.
+* **`utils/`**: Các hàm tiện ích bổ trợ:
+  * `patch_extractor_3d.py`: Cắt các khối 3D Voxel (16x32x32) từ Dicom.
+  * `cluster_3d.py`: Gom cụm nốt phổi dựa trên các mặt cắt lân cận sinh ra từ file 2D (nhằm build hệ tọa độ 3D).
+  * `image_reader.py`: Logic mở/đọc file DICOM chuẩn y tế và ảnh thông thường.
+  * `lung_mask_generator.py`: Tự động nội suy tạo phổi Mask / cắt bỏ background thừa.
+  * `data_prep.py`: Các script nhỏ xử lý mảng data tĩnh.
 * **`weights/`**: Thư mục dùng để chứa các file trọng số pre-trained tải từ trên mạng xuống.
 
 ---
