@@ -16,10 +16,17 @@ class ResultTree(ctk.CTkFrame):
         style.configure("Treeview.Heading", background="#333333", foreground="white", borderwidth=0)
         style.map("Treeview", background=[("selected", "#1f538d")])
 
-        self.tree = ttk.Treeview(res_content, columns=("ID", "Voxel", "Z", "Y", "X", "Malig", "Color"), show="headings", height=15)
+        self.tree = ttk.Treeview(res_content, columns=("ID", "Location", "Size", "Attributes"), show="headings", height=15)
         for col in self.tree["columns"]:
             self.tree.heading(col, text=col)
-            self.tree.column(col, width=50, anchor="center")
+            if col == "ID":
+                self.tree.column(col, width=40, anchor="center")
+            elif col == "Location":
+                self.tree.column(col, width=150, anchor="center")
+            elif col == "Size":
+                self.tree.column(col, width=80, anchor="center")
+            else:
+                self.tree.column(col, width=200, anchor="center")
             
         self.tree.pack(fill="both", expand=True)
         self.tree.bind('<<TreeviewSelect>>', self._on_tree_select)
@@ -29,14 +36,18 @@ class ResultTree(ctk.CTkFrame):
         if not sel: return
         vals = self.tree.item(sel[0])["values"]
         if vals and self.on_item_click_cb:
-            z_str = str(vals[2])
-            if '-' in z_str:
-                z_str = z_str.split('-')[0]
-            try:
-                z_idx = int(z_str)
-                self.on_item_click_cb(z_idx)
-            except ValueError:
-                pass
+            loc_str = str(vals[1])
+            import re
+            m = re.search(r"Z:\s*([\d\-]+)", loc_str)
+            if m:
+                z_str = m.group(1)
+                if '-' in z_str:
+                    z_str = z_str.split('-')[0]
+                try:
+                    z_idx = int(z_str)
+                    self.on_item_click_cb(z_idx)
+                except ValueError:
+                    pass
 
     def clear(self):
         [self.tree.delete(i) for i in self.tree.get_children()]

@@ -16,8 +16,19 @@ class AIPipeline:
         print("Đã tải module UNet Segmentation!")
         
         # Hàm __init__ khởi tạo tự động file YOLO weights
-        self.yolo_detector = NoduleDetector(weights_path="yolo11n.pt", device=device)
-        print("Đã tải module YOLO11n Detection!")
+        path_main = 'runs_compare/runs_compare/train_yolov112/weights/best.pt'
+        if not os.path.exists(path_main):
+            path_main = 'runs_compare/train_yolov112/weights/best.pt'
+        if not os.path.exists(path_main):
+            path_main = "best.pt"
+        self.yolo_detector = NoduleDetector(weights_path=path_main, device=device)
+        print("Đã tải module YOLO Chính!")
+        
+        # Mô hình phụ ghép Ensemble
+        self.yolo_aux = None
+        if os.path.exists("best.pt"):
+            self.yolo_aux = NoduleDetector(weights_path="best.pt", device=device)
+            print("Đã tải module YOLO Phụ (Ensemble)!")
         
         # Hàm nạp Não Phân Loại 3 Chiều FPR
         self.fpr_model = Lightweight3DCNN().to(device)
@@ -39,6 +50,18 @@ class AIPipeline:
         """Khởi tạo lại Detector khi người dùng đổi file weights mới (.pt)"""
         self.yolo_detector = NoduleDetector(weights_path=weights_path, device=self.device)
         print(f"Đã tải mô hình YOLO11 mới từ: {weights_path}")
+
+    def apply_clahe(self, pil_img):
+        img_np = np.array(pil_img)
+        if len(img_np.shape) == 3:
+            img_gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+        else:
+            img_gray = img_np
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8,8))
+        cl = clahe.apply(img_gray)
+        if len(img_np.shape) == 3:
+             cl = cv2.cvtColor(cl, cv2.COLOR_GRAY2RGB)
+        return Image.fromarray(cl)
 
     def preprocess_image(self, pil_image):
         # Resize về đúng input của U-Net (256x256 để mô hình chạy cực nhẹ)
@@ -68,9 +91,7 @@ class AIPipeline:
         
         # Áp dụng Mask phổi bằng cv2
         mask_resized = cv2.resize(lung_mask.astype(np.uint8), original_size)
-        
         # 3. Bước Trυng gian: Cắt & Zoom vυng phổi dẫy nhiễu xųơnĝ
-        # Tὶm khung viền chứɑ 2 lá phổi (với đệm an tοàn 20px)
         mask_255 = (mask_resized * 255).astype(np.uint8) if mask_resized.max() <= 1 else mask_resized
         coords = cv2.findNonZero(mask_255)
         if coords is not None:
@@ -83,30 +104,66 @@ class AIPipeline:
         else:
             lung_xmin, lung_ymin, lung_xmax, lung_ymax = 0, 0, original_size[0], original_size[1]
             
-        # Áp dụng Mask đen trắng lên PIL Image để xử lý triệt để nền
         cv_img_original = np.array(pil_image)
-        # Tạo mask nhị phân 0-1
         binary_mask = (mask_255 > 127).astype(np.uint8)
         masked_img = cv_img_original * binary_mask
-        
-        # Cắt (Crop) phần ảnh trυng tâm màng phổi
         cropped_img_np = masked_img[lung_ymin:lung_ymax, lung_xmin:lung_xmax]
         cropped_pil_image = Image.fromarray(cropped_img_np)
         
-        # 3. Bước 2: YOLO Detection (Cắt Nodule trên ảnh đã phỏng tσ/crop)
-        nodules_raw = self.yolo_detector.predict(cropped_pil_image, conf_threshold=conf_threshold)
+        # 3. Bước 2: YOLO Detection ENSEMBLE
+        nodules_raw = []
+        conf_target = 0.01 
         
-        # BỘ LỌC CHẶN BUÔNG (Phòng trường hợp YOLO phớt lờ tham số conf)
+        # A. Main Model trên Ảnh Crop (Vốn được train trên ảnh Crop)
+        res_main = self.yolo_detector.model.predict(source=cropped_pil_image, conf=conf_target, augment=True, imgsz=1024, verbose=False)
+        for r in res_main:
+            for box in r.boxes:
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                conf = box.conf[0].item()
+                cls_id = int(box.cls[0].item())
+                n = {
+                    'x1': int(x1 + lung_xmin), 'y1': int(y1 + lung_ymin),
+                    'x2': int(x2 + lung_xmin), 'y2': int(y2 + lung_ymin),
+                    'center_x': int((x1+x2)/2 + lung_xmin), 'center_y': int((y1+y2)/2 + lung_ymin),
+                    'confidence': conf, 'class_id': cls_id
+                }
+                nodules_raw.append(n)
+            
+        # B. Main Model trên Ảnh Crop + CLAHE (TTA)
+        res_clahe = self.yolo_detector.model.predict(source=self.apply_clahe(cropped_pil_image), conf=conf_target, augment=True, imgsz=1024, verbose=False)
+        for r in res_clahe:
+            for box in r.boxes:
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                conf = box.conf[0].item()
+                cls_id = int(box.cls[0].item())
+                n = {
+                    'x1': int(x1 + lung_xmin), 'y1': int(y1 + lung_ymin),
+                    'x2': int(x2 + lung_xmin), 'y2': int(y2 + lung_ymin),
+                    'center_x': int((x1+x2)/2 + lung_xmin), 'center_y': int((y1+y2)/2 + lung_ymin),
+                    'confidence': conf, 'class_id': cls_id
+                }
+                nodules_raw.append(n)
+            
+        # C. Aux Model (Mô hình cũ siêu nhạy nếu có)
+        if self.yolo_aux is not None:
+            res_aux = self.yolo_aux.model.predict(source=pil_image, conf=conf_target, augment=True, imgsz=1024, verbose=False)
+            for r in res_aux:
+                for box in r.boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].tolist()
+                    conf = box.conf[0].item()
+                    cls_id = int(box.cls[0].item())
+                    n = {
+                        'x1': int(x1), 'y1': int(y1),
+                        'x2': int(x2), 'y2': int(y2),
+                        'center_x': int((x1+x2)/2), 'center_y': int((y1+y2)/2),
+                        'confidence': conf, 'class_id': cls_id
+                    }
+                    nodules_raw.append(n)
+        
+        # BỘ LỌC CHẶN BUÔNG DỰA VÀO CONFIDENCE
         safe_nodules = []
         for n in nodules_raw:
-            if n['confidence'] >= conf_threshold:
-                # Cộng ngượс tọɑ độ từ khunɡ сắt trả về ảnħ gốc
-                n['x1'] += lung_xmin
-                n['x2'] += lung_xmin
-                n['y1'] += lung_ymin
-                n['y2'] += lung_ymin
-                n['center_x'] += lung_xmin
-                n['center_y'] += lung_ymin
+            if n['confidence'] >= conf_target:
                 safe_nodules.append(n)
         
         # Sắp xếp các nốt tìm được theo độ tin cậy (Confidence) giảm dần
@@ -115,7 +172,7 @@ class AIPipeline:
         # LỌC NHIỄU YOLO VÀ CUSTOM NMS (GỘP BOX):
         nodules = []
         max_nodule_size = original_size[0] * 0.25 # Nốt không vượt quá 25% chiều rộng phổi
-        max_nodules_per_slice = 5 # Không lấy quá 5 nốt/1 lát cắt để chống nhiễu tuyệt đối
+        max_nodules_per_slice = 30 # Nâng mức chịu tải lên 30 box để bộ 3D CNN làm việc hết công suất
         
         for nodule in safe_nodules:
             if len(nodules) >= max_nodules_per_slice:
@@ -129,14 +186,14 @@ class AIPipeline:
             aspect_ratio = width / height if height > 0 else 0
             
             if width < max_nodule_size and height < max_nodule_size:
-                # Siết chặt lại! Nốt thật không bao giờ dẹp lép (1 chiều dài hơn 2 lần chiều kia)
-                if 0.5 <= aspect_ratio <= 2.0:
-                    # Kiểm tra trùng lặp (Custom Non-Maximum Suppression)
+                # Nới lỏng: Nốt có thể bị dẹp do lát cắt, cho qua hết nếu tỷ lệ dưới 10
+                if 0.1 <= aspect_ratio <= 10.0:
+                    # Hợp nhất box nếu chúng đè lên nhau (IoU) hoặc khoảng cách tâm siêu nhỏ
                     is_duplicate = False
                     for existing in nodules:
                         dist = np.sqrt((nodule["center_x"] - existing["center_x"])**2 + (nodule["center_y"] - existing["center_y"])**2)
-                        # Nếu Box mới sinh ra nằm cách Box cũ dưới 15 pixel thì chắc chắn là vẽ đè lên cùng 1 nốt
-                        if dist < 15: 
+                        # Giảm khoảng cách gộp từ 15 xuống 5 để không nuốt mất nốt bên cạnh
+                        if dist < 5: 
                             is_duplicate = True
                             break
                     
@@ -155,14 +212,14 @@ class AIPipeline:
             
             # Nếu patch hợp lệ
             if patch.size > 0:
-                # Tìm mask hình chi tiết (true/false) VÀ Đo lường đặc tính Hình học Kích Thước/Độ Tròn
+                # FIND SHAPE
                 fine_mask, morph_area, morph_circ = fallback_segmentation(patch)
                 
-                # BỘ LỌC CỨNG (Hậu Xử Lý Hình Thái Học): Trảm Xương & Mạch Máu Cực Đoan
-                # Vì các Nốt lớn (Mass) có khi lên tới diện tích 2000-3000 pixel, ta phải nới lỏng Area > 2000.
-                # Độ tròn Circularity cũng phải hạ xuống 0.15 để tránh "giết nhầm" nốt ung thư dị hình.
-                if morph_circ < 0.15 or morph_area > 2000 or morph_area < min_voxel:
-                    continue # Vứt bỏ vì là sợi mạch máu dài quá mức hoặc khúc xương sườn to qúa mức
+                # BỘ LỌC CỨNG: Hạ ngưỡng loại trừ để tăng Recall
+                # Nếu otsu thất bại (morph_area == 0), tạm bỏ qua lệnh trảm để giữ YOLO Recall!
+                if morph_area > 0:
+                    if morph_circ < 0.02 or morph_area > 4000 or morph_area < min_voxel:
+                        continue # Vứt bỏ vì là sợi mạch máu dài quá mức hoặc khúc xương sườn to qúa mức
                     
                 # BỘ LỌC TỐI CAO - 3D CNN CLASSIFIER (False Positive Reduction)
                 # Đưa nốt này vào ngắm dưới lăng kính không gian 3 chiều

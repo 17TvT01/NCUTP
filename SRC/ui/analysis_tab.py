@@ -169,10 +169,13 @@ class AnalysisTab(ctk.CTkFrame):
         for c in clusters:
             fpr_percent = f"{c.get('fpr_score', 1.0)*100:.1f}% AI3D" 
             
-            # Hiện Range "Lát 22-25" nếu nốt kéo dài, ngược lại hiện "Lát 22"
             z_val = f"{c['z_start']}-{c['z_end']}" if c['z_start'] != c['z_end'] else str(c['z_start'])
             
-            self.result_tree.add_item((n_id, c['voxel'], z_val, c['center_y'], c['center_x'], fpr_percent, "Red"))
+            location = f"Z: {z_val} | Y: {c['center_y']} | X: {c['center_x']}"
+            size = f"{c['voxel']} px²" 
+            attributes = f"Malignancy: {fpr_percent}"
+            
+            self.result_tree.add_item((n_id, location, size, attributes))
             n_id += 1
         
         self.image_viewer.display_slice()

@@ -1,5 +1,5 @@
 {
-    "model_path": "D:/Tool-vibecode/NCS/best.pt",
+    "model_path": "D:/Tool-vibecode/NCS/runs_compare/runs_compare/train_yolov11/weights/best.pt",
     "conf": 0.2500000000000001,
     "voxel": 50,
     "fpr": 0.5,
