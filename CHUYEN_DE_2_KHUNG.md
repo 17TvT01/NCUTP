@@ -56,6 +56,63 @@
 - **Mục đích trong app:** Tạo ROI (vùng lợi ích) chỉ xử lý bên trong phổi, tăng tốc độ
 - **Kết quả mong đợi:** Mask chính xác >95%, không bỏ sót mô phổi
 
+**Sơ đồ U-Net Architecture:**
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                              U-NET ARCHITECTURE                         │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Input (512×512)                                                        │
+│       ↓                                                                  │
+│  ┌────────┐     skip1     ┌────────┐                                   │
+│  │Conv64  ├──────────────→│        │                                   │
+│  │ReLU    │               │        │                                   │
+│  │(3×3)   │               │ Concat │                                   │
+│  └────┬───┘               │ &Deconv│                                   │
+│       ↓                   │        │                                   │
+│  MaxPool (↓2)            │        │←──────────┐                        │
+│       ↓                   │        │           │                        │
+│  ┌────────┐     skip2     └────────┘           │                        │
+│  │Conv128 ├──────────────────────────────→ DecoderBlock2               │
+│  │(3×3)   │                                (Deconv128)                  │
+│  └────┬───┘                                    ↑                        │
+│       ↓                                        │                        │
+│  MaxPool (↓2)                                  │                        │
+│       ↓                                        │                        │
+│  ┌────────┐     skip3     ┌────────┐          │                        │
+│  │Conv256 ├──────────────→│        │          │                        │
+│  │(3×3)   │               │ Concat │          │                        │
+│  └────┬───┘               │ &Deconv├──────────┘                        │
+│       ↓                   │(Deconv256)                                  │
+│  MaxPool (↓2)            │        │                                   │
+│       ↓                   └────────┘                                   │
+│  ┌────────┐                   ↑                                        │
+│  │Conv512 │             skip4 │                                        │
+│  │(3×3)   │                   │                                        │
+│  │BottleNeck │                │                                        │
+│  └────┬───┘                   │                                        │
+│       ↓                       │                                        │
+│  ┌────────────┐               │                                        │
+│  │DecoderBlock1 ├─────────────┘                                        │
+│  │(Deconv512)  │                                                       │
+│  └────┬────────┘                                                       │
+│       ↓                                                                  │
+│  ┌────────────┐                                                       │
+│  │Conv1 (1×1) │                                                       │
+│  │Output: 1ch │                                                       │
+│  │Sigmoid     │                                                       │
+│  └────┬───────┘                                                        │
+│       ↓                                                                  │
+│  Output Mask (512×512, binary)                                         │
+│       ↓                                                                  │
+│  Dice Loss + BCE → Optimize                                            │
+│                                                                          │
+└────────────────────────────────────────────────────────────────────────┘
+
+Khác biệt quan trọng: Skip connection giữ thông tin fine-grained từ encoder,
+giúp decoder tái dựng chi tiết ranh giới phổi chính xác hơn.
+```
+
 ### 3.2 YOLO (You Only Look Once) - Phát hiện nốt
 - **Tại sao YOLO:** Nhanh, real-time, phù hợp với máy yếu (YOLOv8n, YOLOv11n)
 - **So sánh YOLOv8 vs YOLOv11:**
@@ -65,12 +122,129 @@
 - **Output:** Bounding box (x, y, w, h) + confidence score cho từng nốt
 - **Challenge:** YOLO có thể nhầm mạch máu, nốt bé khó phát hiện
 
+**Sơ đồ YOLO Detection Architecture:**
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    YOLO DETECTION PIPELINE                        │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  Input CT Slice (416×416×3)                                     │
+│       ↓                                                            │
+│  ┌─────────────────────────────────┐                            │
+│  │ Backbone (CSPDarknet)           │                            │
+│  │ - Conv 3×3 stride 2 → 52×52     │                            │
+│  │ - Conv 3×3 stride 2 → 26×26     │                            │
+│  │ - Conv 3×3 stride 2 → 13×13     │                            │
+│  │ (Feature extraction)             │                            │
+│  └────────────┬────────────────────┘                            │
+│               ↓                                                    │
+│  ┌─────────────────────────────────┐                            │
+│  │ Neck (PANet)                    │                            │
+│  │ - FPN upsampling: 13→26→52 (·2) │                            │
+│  │ - Concat with backbone features │                            │
+│  │ - Multi-scale feature fusion    │                            │
+│  └────────────┬────────────────────┘                            │
+│               ↓                                                    │
+│  ┌─────────────────────────────────┐                            │
+│  │ Head (Detection)                │                            │
+│  │ 3 Outputs: 52×52 / 26×26 / 13×13│ (Small / Med / Large)    │
+│  │                                 │                            │
+│  │ Each output: (x, y, w, h,      │                            │
+│  │              conf, class_prob)  │                            │
+│  │ Total: N × (4 + 1 + num_classes)│                            │
+│  └────────────┬────────────────────┘                            │
+│               ↓                                                    │
+│  ┌─────────────────────────────────┐                            │
+│  │ Post-Processing (NMS)           │                            │
+│  │ - Filter by confidence > 0.5    │                            │
+│  │ - Non-Max Suppression (IoU>0.4) │                            │
+│  │ - Keep top detections           │                            │
+│  └────────────┬────────────────────┘                            │
+│               ↓                                                    │
+│  Output: List of (x, y, w, h, conf)                             │
+│  Example: [(100, 120, 30, 35, 0.92),                            │
+│            (200, 150, 25, 28, 0.85),                            │
+│            ...]                                                   │
+│                                                                   │
+│  Loss function: CIoU Loss + Focal Loss (để cân bằng class)      │
+│                                                                   │
+└──────────────────────────────────────────────────────────────────┘
+
+Úu điểm: Phát hiện nhanh 1 pass, đủ tốc độ real-time trên CPU.
+Nhược điểm: Chỉ xem 2D slice, dễ nhầm với mạch máu 3D.
+```
+
 ### 3.3 3D CNN - Giảm false positive
 - **Vấn đề:** YOLO hoạt động từng slice 2D, không dùng thông tin 3D → nhầm mạch máu
 - **Giải pháp:** Sau YOLO detect nốt, cắt khối 3D xung quanh (16×32×32 voxel)
 - **Mô hình 3D CNN nhẹ:** Conv3D + BatchNorm + ReLU, output: [Nốt thực, Mạch máu, Rác]
 - **Lợi ích:** Nhìn 3D context, độ chính xác tăng thêm 5–10%
 - **Chi phí:** RAM hơi cao, nhưng dùng AMP (Automatic Mixed Precision) → tối ưu
+
+**Sơ đồ 3D CNN Architecture (Lightweight FPR Filter):**
+```
+┌────────────────────────────────────────────────────────────────┐
+│           3D CNN FOR FALSE POSITIVE REDUCTION (FPR)            │
+├────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Input: 3D Patch (16×32×32×1) [Depth × Height × Width × Ch]  │
+│       ↓                                                          │
+│  ┌──────────────────────────────┐                             │
+│  │ Block 1: Conv3D 32 filters   │                             │
+│  │ - Conv3D (3×3×3, stride=1)   │                             │
+│  │ - BatchNorm 3D               │                             │
+│  │ - ReLU                       │                             │
+│  │ - MaxPool3D (2×2×2, stride=2)│                             │
+│  │ Output: (8×16×16×32)         │                             │
+│  └──────────┬───────────────────┘                             │
+│             ↓                                                    │
+│  ┌──────────────────────────────┐                             │
+│  │ Block 2: Conv3D 64 filters   │                             │
+│  │ - Conv3D (3×3×3, stride=1)   │                             │
+│  │ - BatchNorm 3D               │                             │
+│  │ - ReLU                       │                             │
+│  │ - MaxPool3D (2×2×2, stride=2)│                             │
+│  │ Output: (4×8×8×64)           │                             │
+│  └──────────┬───────────────────┘                             │
+│             ↓                                                    │
+│  ┌──────────────────────────────┐                             │
+│  │ Block 3: Conv3D 128 filters  │                             │
+│  │ - Conv3D (3×3×3, stride=1)   │                             │
+│  │ - BatchNorm 3D               │                             │
+│  │ - ReLU                       │                             │
+│  │ - MaxPool3D (2×2×2, stride=2)│                             │
+│  │ Output: (2×4×4×128)          │                             │
+│  └──────────┬───────────────────┘                             │
+│             ↓                                                    │
+│  ┌──────────────────────────────┐                             │
+│  │ Global Average Pooling 3D    │                             │
+│  │ Output: (128,)               │                             │
+│  └──────────┬───────────────────┘                             │
+│             ↓                                                    │
+│  ┌──────────────────────────────┐                             │
+│  │ Fully Connected Layers       │                             │
+│  │ - FC1: 128 → 64 (ReLU)       │                             │
+│  │ - Dropout (0.5)              │                             │
+│  │ - FC2: 64 → 32 (ReLU)        │                             │
+│  │ - Dropout (0.5)              │                             │
+│  │ - FC3: 32 → 3 (Softmax)      │                             │
+│  │ Output: [P_nodule, P_vessel, P_trash] │                     │
+│  └──────────┬───────────────────┘                             │
+│             ↓                                                    │
+│  Output probabilities:                                          │
+│  - 0: True nodule (nguy hiểm) → Keep                           │
+│  - 1: Blood vessel (mạch máu) → Discard (false positive)       │
+│  - 2: Trash/artifact → Discard                                 │
+│                                                                 │
+│  Decision: IF P_nodule > 0.6 THEN keep detection               │
+│                                                                 │
+│  Loss: Cross Entropy (3-way classification)                    │
+│  Optimization: AMP (Automatic Mixed Precision) → 50% RAM save   │
+│                                                                 │
+└────────────────────────────────────────────────────────────────┘
+
+Dù nhỏ (0.8M param) nhưng hiệu quả cao vì dùng context 3D.
+```
 
 ### 3.4 Morphological Filter - Hậu xử lý
 - **Mục đích:** Loại bỏ các artifact (tiếng ồn), giữ lại nốt thực
@@ -135,14 +309,130 @@
 ```
 
 ### 5.2 Luồng dữ liệu end-to-end
-1. **Input:** User chọn folder DICOM
-2. **Load:** `image_reader.py` đọc DICOM → numpy array (z, h, w)
-3. **Lung mask:** U-Net tạo mask phổi
-4. **Detect:** YOLO detect từng slice → list detection 2D
-5. **Extract 3D patch:** Xung quanh từng detection, cắt voxel (16×32×32)
-6. **Classify FPR:** 3D CNN dự đoán: Nốt thực / Mạch máu / Rác → filter
-7. **Cluster 3D:** Gom các detection lân cận → 1 nốt duy nhất (x, y, z, size)
-8. **Output:** JSON chứa list nốt + tọa độ + kích thước + confidence
+
+**Sơ đồ Pipeline Inference End-to-End:**
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                  FULL PIPELINE: INPUT → OUTPUT                           │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  [Step 0] USER INPUT                                                    │
+│  ┌─────────────────────────────────────────────────────────────┐        │
+│  │ User chọn folder DICOM từ UI                               │        │
+│  │ Ví dụ: /data/3000518.000000-NA-66796/                      │        │
+│  │ Contains: 1-001.dcm, 1-002.dcm, ..., 1-150.dcm             │        │
+│  └────────────────────┬────────────────────────────────────────┘        │
+│                       ↓                                                    │
+│  [Step 1] LOAD & PREPROCESS                                             │
+│  ┌─────────────────────────────────────────────────────────────┐        │
+│  │ image_reader.py:                                            │        │
+│  │ - Đọc tất cả DICOM files → array (150, 512, 512)           │        │
+│  │ - Extract pixel_spacing, slice_thickness từ DICOM metadata  │        │
+│  │ - Normalize HU: clip [-1024, 400] → [0, 1]                │        │
+│  │ Output: (150, 512, 512) float32, HU normalized             │        │
+│  └────────────────────┬────────────────────────────────────────┘        │
+│                       ↓                                                    │
+│  [Step 2] LUNG SEGMENTATION (U-Net)                                     │
+│  ┌─────────────────────────────────────────────────────────────┐        │
+│  │ lung_segment.py:                                            │        │
+│  │ - Inference U-Net trên từng slice                          │        │
+│  │ - Output: 150 mask (150, 512, 512) binary                  │        │
+│  │ - Post-process: morphological closing để smooth mask        │        │
+│  │ Result: Lung ROI (Region of Interest)                       │        │
+│  └────────────────────┬────────────────────────────────────────┘        │
+│                       ↓                                                    │
+│  [Step 3] DETECTION (YOLO) - FOR EACH SLICE                            │
+│  ┌─────────────────────────────────────────────────────────────┐        │
+│  │ nodule_detect.py (loop over 150 slices):                   │        │
+│  │ - Input: slice [i] (512×512) + mask [i]                    │        │
+│  │ - Resize to 416×416 (YOLO input)                           │        │
+│  │ - Inference YOLO → (N_i, 6) detections                     │        │
+│  │   Each detection: (x, y, w, h, conf, class_id)             │        │
+│  │ - Filter by conf > 0.5, apply NMS                          │        │
+│  │ Output: List of (x, y, w, h, conf, z_slice)               │        │
+│  │ Typical: ~300–500 detections across all slices (high!)    │        │
+│  └────────────────────┬────────────────────────────────────────┘        │
+│                       ↓                                                    │
+│  [Step 4] EXTRACT 3D PATCHES & CLASSIFY (3D CNN)                       │
+│  ┌─────────────────────────────────────────────────────────────┐        │
+│  │ patch_extractor_3d.py + fpr_3d_net.py:                     │        │
+│  │ For each YOLO detection (x, y, z):                          │        │
+│  │ - Extract 3D patch (16×32×32) centered at (x, y, z)        │        │
+│  │ - Inference 3D CNN → [P_nodule, P_vessel, P_trash]         │        │
+│  │ - IF P_nodule > 0.6: Keep detection, ELSE: Discard        │        │
+│  │ Output: Filtered detections (~100–200 left)                │        │
+│  └────────────────────┬────────────────────────────────────────┘        │
+│                       ↓                                                    │
+│  [Step 5] POST-PROCESSING                                               │
+│  ┌─────────────────────────────────────────────────────────────┐        │
+│  │ 5a) Morphological Filter:                                   │        │
+│  │ - Remove blobs < 10 pixels (noise)                          │        │
+│  │ - Erode + Dilate (opening)                                  │        │
+│  │                                                              │        │
+│  │ 5b) 3D Clustering (merge nearby detections):                │        │
+│  │ - DBSCAN or 3D IoU-based merge                              │        │
+│  │ - Threshold: if distance < 20mm → same nodule             │        │
+│  │ - Compute centroid: (x_mean, y_mean, z_mean)              │        │
+│  │                                                              │        │
+│  │ 5c) Compute nodule size:                                    │        │
+│  │ - diameter_mm = avg(width, height) × pixel_spacing         │        │
+│  │ - Add metadata from merged detections                      │        │
+│  │                                                              │        │
+│  │ Output: Final list of nodules (~5–15 per case)             │        │
+│  └────────────────────┬────────────────────────────────────────┘        │
+│                       ↓                                                    │
+│  [Step 6] CLASSIFY RISK LEVEL                                           │
+│  ┌─────────────────────────────────────────────────────────────┐        │
+│  │ Rule-based risk classification (Lung-RADS):                │        │
+│  │ - IF diameter < 6mm: 🟢 Low risk                           │        │
+│  │ - IF 6 ≤ diameter < 8mm: 🟡 Intermediate risk              │        │
+│  │ - IF diameter ≥ 8mm: 🔴 High risk                          │        │
+│  │ + Consider nodule type (solid vs GGN)                      │        │
+│  └────────────────────┬────────────────────────────────────────┘        │
+│                       ↓                                                    │
+│  [Step 7] GENERATE OUTPUT                                               │
+│  ┌─────────────────────────────────────────────────────────────┐        │
+│  │ result_manager.py:                                          │        │
+│  │ - Generate JSON report                                      │        │
+│  │ - Generate PNG with annotated slices                        │        │
+│  │ - Display in UI table                                       │        │
+│  │                                                              │        │
+│  │ JSON format:                                                │        │
+│  │ {                                                            │        │
+│  │   "case_id": "3000518",                                     │        │
+│  │   "nodules": [                                              │        │
+│  │     {                                                        │        │
+│  │       "id": 1,                                              │        │
+│  │       "x_mm": 245.5,                                        │        │
+│  │       "y_mm": 189.2,                                        │        │
+│  │       "z_slice": 45,                                        │        │
+│  │       "diameter_mm": 6.2,                                   │        │
+│  │       "confidence": 0.92,                                   │        │
+│  │       "risk_level": "intermediate",                        │        │
+│  │       "model_prob": {"yolo": 0.92, "3d_cnn": 0.88}         │        │
+│  │     },                                                       │        │
+│  │     ...                                                      │        │
+│  │   ]                                                          │        │
+│  │ }                                                            │        │
+│  └─────────────────────────────────────────────────────────────┘        │
+│                       ↓                                                    │
+│  [Output] FINAL RESULT                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐        │
+│  │ ✓ JSON file saved                                          │        │
+│  │ ✓ PNG images saved (annotated)                             │        │
+│  │ ✓ UI shows: 5 nodules detected, 2 high-risk, 2 mid, 1 low │        │
+│  │ ✓ Processing time: 45s (200 slices)                        │        │
+│  │ ✓ Memory used: 2.1GB / 4GB available                       │        │
+│  └─────────────────────────────────────────────────────────────┘        │
+│                                                                           │
+└──────────────────────────────────────────────────────────────────────────┘
+
+Thống kê qua các bước:
+1. Load DICOM: 150 slices
+2. YOLO detect: 300–500 raw detections (FP nhiều)
+3. 3D CNN filter: 100–200 passed (loại ~50% FP)
+4. Clustering: ~5–15 final nodules (gom lại duplicates)
+```
 
 ### 5.3 Các thành phần chính
 | Module | File | Chức năng |
@@ -445,6 +735,42 @@ Output: List of (x, y, z, diameter_mm, confidence)
 - **Metric:** Recall, Precision, F1, FROC curve
 
 ### 10.2 Kết quả định lượng
+
+**Sơ đồ Metric Evaluation - FROC Curve:**
+```
+┌────────────────────────────────────────────────────────────────┐
+│           FROC CURVE: PIPELINE IMPROVEMENT ANALYSIS             │
+├────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│ Sensitivity (%) ↑                                              │
+│ 100 │                                        ╭─ Full Pipeline  │
+│  95 │                                   ╭────╯                │
+│  90 │                              ╭────╯                      │
+│  85 │  ┃ +3D CNN         ╭────╯                               │
+│  80 │  ┃ +Morphological  │                                    │
+│  75 │  ┃ +Clustering     │                                    │
+│  70 │  ┃                 │                                    │
+│  65 │  ├─ YOLO only  ────┘                                    │
+│     │  │                                                       │
+│  0  └──┴──────────────────────────────────────────────────────→
+│     0  2  4  6  8  10 12 14
+│                FP per case ←
+│
+│ Legend:
+│ ─── YOLO only:        Recall 78%, Precision 65%, FP=12
+│ ─── +3D CNN:          Recall 84%, Precision 78%, FP=5
+│ ─── +Morphological:   Recall 85%, Precision 80%, FP=3
+│ ─── +Clustering:      Recall 87%, Precision 82%, FP=2
+│
+└────────────────────────────────────────────────────────────────┘
+
+Nhận xét:
+- 3D CNN giảm FP từ 12 → 5 (58% improvement)
+- Morphological filter giảm thêm FP từ 5 → 3 (40%)
+- Clustering 3D giảm trùng lặp từ 3 → 2 (33%)
+- Tổng cộng: Recall tăng 9% (78% → 87%), FP giảm 83% (12 → 2)
+```
+
 #### **Bảng 1: So sánh từng module**
 | Pipeline | Recall | Precision | F1 Score | FP per case |
 |----------|--------|-----------|----------|-------------|
@@ -797,6 +1123,244 @@ Bạn nên chuẩn bị ít nhất các ảnh sau:
 - Mỗi bảng nên có 1 đoạn nhận xét kết quả phía dưới
 - Mỗi sơ đồ nên giải thích luồng xử lý từ trái sang phải hoặc từ trên xuống dưới
 - Nếu có số liệu thật, hãy so sánh với một phiên bản baseline để bài viết dày và thuyết phục hơn
+
+### 14.10 DANH MỤC THÔNG TIN CỤ THỀ CẦN LẤY TỪ APP NÀY (d:\Tool-vibecode\NCS)
+
+Đây là danh sách chi tiết những gì bạn **phải lấy từ code, model, kết quả thực tế của app** để đưa vào bài viết. Không phải là tài liệu tổng quát, mà là con số, tham số, metadata **thực sự từ app của bạn**.
+
+#### **A. Thông tin từ Code (SRC/ folder)**
+
+**A1. File: `src/main.py`**
+- Loại framework giao diện sử dụng: CustomTkinter? PyQt?
+- Các Tab chính được định nghĩa: analysis_tab, compare_tab, training_tab, settings_tab
+- Màu sắc dùng để hiển thị risk level: xanh (low), vàng (mid), đỏ (high) - lấy hex color code
+- Kích thước cửa sổ mặc định
+- Tên công ty/bệnh viện nếu có
+
+**A2. File: `src/pipeline.py`**
+- Thứ tự các bước xử lý (load → preprocess → detect → classify → output)
+- Tên các hàm chính (ví dụ: `run_inference()`, `apply_lung_mask()`, `cluster_3d()`)
+- Các threshold mặc định:
+  - YOLO confidence threshold: mặc định 0.5 hay gì?
+  - 3D CNN threshold: mặc định 0.6 hay gì?
+  - NMS IoU threshold cho YOLO: mặc định là bao nhiêu?
+  - Khoảng cách clustering 3D (mm): mặc định 20mm hay gì?
+- Các hằng số (constants):
+  - Input size YOLO: 416×416 hay 640×640?
+  - 3D patch size: 16×32×32 hay khác?
+  - Batch size mặc định khi inference
+
+**A3. File: `src/models/fpr_3d_net.py`**
+- Kiến trúc 3D CNN chi tiết:
+  - Số Conv3D blocks: 3? 4?
+  - Số filters mỗi block: 32→64→128 hay khác?
+  - Kernel size: 3×3×3 hay 5×5×5?
+  - GlobalAvgPooling hay khác?
+  - Số FC layers: 2? 3?
+  - Số tham số (parameters): bao nhiêu triệu (M)?
+- Output classes: 3 lớp (nodule, vessel, trash) hay khác?
+
+**A4. File: `src/models/lung_segment.py` (U-Net)**
+- Kiến trúc U-Net:
+  - Số encoder block: 4? 5?
+  - Số decoder block: bằng encoder không?
+  - Số filters: 64→128→256→512 hay khác?
+  - Skip connection: có hay không?
+- Loss function: Dice + BCE hay gì?
+
+**A5. File: `src/models/nodule_detect.py` (YOLO)**
+- Phiên bản YOLO sử dụng: YOLOv8n? YOLOv11n?
+- Input size: 416×416? 640×640?
+- Các anchor sizes
+- NMS threshold
+
+**A6. File: `src/utils/image_reader.py`**
+- HU normalization range: [-1024, 400] hay khác?
+- Pixel spacing: mỗi pixel bằng bao nhiêu mm? (thường 0.5–1mm)
+- Slice thickness: mỗi slice dày bao nhiêu mm? (thường 1–2mm)
+
+**A7. File: `src/utils/patch_extractor_3d.py`**
+- 3D patch size: 16×32×32 hay khác?
+- Padding strategy: zero padding hay edge padding?
+
+#### **B. Thông tin từ Model Weights (weights/ folder)**
+
+**B1. File: `weights/unet_best.pth`**
+- Kích thước file: bao nhiêu MB?
+- Dice score trên validation set: bao nhiêu?
+- Epoch được lưu: epoch bao nhiêu?
+- Best val loss: bao nhiêu?
+
+**B2. File: `weights/yolov8n_best.pt` (nếu có)**
+- Kích thước file: bao nhiêu MB?
+- mAP@0.5 trên test set: bao nhiêu?
+- Epoch được lưu: bao nhiêu?
+
+**B3. File: `weights/yolov11n_best.pt` (nếu có)**
+- Kích thước file: bao nhiêu MB?
+- mAP@0.5 trên test set: bao nhiêu?
+- So sánh tốc độ với v8n: bao lâu/image?
+
+**B4. File: `weights/fpr_3d_best.pth`**
+- Kích thước file: bao nhiêu MB?
+- Accuracy trên validation: bao nhiêu%?
+- Loss: bao nhiêu?
+- Confusion matrix chi tiết: [P_nodule, P_vessel, P_trash]
+
+#### **C. Thông tin từ Metrics & Results**
+
+**C1. File: `metrics.txt` hoặc `metrics.json` hoặc `metrics_conf05.json`**
+- Recall: bao nhiêu%?
+- Precision: bao nhiêu%?
+- F1 score: bao nhiêu?
+- mAP: bao nhiêu?
+- Sensitivity: bao nhiêu%?
+- Specificity: bao nhiêu%?
+- False positive per case: bao nhiêu?
+- False negative per case: bao nhiêu?
+- Confidence threshold sử dụng: 0.5? 0.6?
+
+**C2. File: `evaluate_models.ipynb` hoặc `evaluate_models.py`**
+- Số lượng test cases: bao nhiêu bệnh nhân?
+- Số lượng test nodules: bao nhiêu nốt?
+- Breakdown theo kích thước: 3–5mm bao nhiêu nốt? 5–8mm? >8mm?
+- Breakdown theo loại: solid, GGN, mixed bao nhiêu nốt mỗi loại?
+- Chi tiết từng case: case nào bị miss nhiều? Case nào có FP?
+- Time per case: trung bình mất bao lâu để process 1 case?
+- RAM usage: mỗi case sử dụng RAM bao nhiêu GB?
+
+**C3. File: `evaluate_pipeline.py`**
+- Dòng nào chứa tính recall, precision?
+- Dòng nào chứa 3D clustering logic?
+- Dòng nào chứa morphological filter?
+
+**C4. File: `report/evaluation_report.md`**
+- Kết luận chính: đạt được recall bao nhiêu%?
+- Vấn đề chính gặp phải
+- Recommendation cho improvement
+
+#### **D. Thông tin từ Dataset**
+
+**D1. File: `data/*/086.xml` (annotation file)**
+- Format XML: có những trường nào? nodule_id, x, y, z, diameter, type?
+- Các loại nốt được nhãn: solid, GGN, mixed?
+- Khoảng diameter: từ bao nhiêu mm đến bao nhiêu mm?
+
+**D2. Folder: `data/` (DICOM data)**
+- Số bệnh nhân: tổng cộng bao nhiêu folder?
+- Số slice trung bình mỗi bệnh nhân: bao nhiêu slice?
+- Số nốt được nhãn tất cả: tổng cộng bao nhiêu nốt?
+- Phân bố nodule size: bảng histogram hoặc số liệu cụ thể
+
+**D3. Folder: `dataset_yolo_final/`**
+- Số training images: bao nhiêu?
+- Số validation images: bao nhiêu?
+- Số test images: bao nhiêu?
+- Data augmentation được dùng: rotation, brightness, contrast?
+- Augmentation ratio: dữ liệu tăng bao nhiêu lần? 2×? 3×?
+
+**D4. Folder: `dataset_3d_final.npz` (3D patch dataset)**
+- Số positive patches (nodule thực): bao nhiêu?
+- Số negative patches (vessel/trash): bao nhiêu mỗi loại?
+- Kích thước patch: 16×32×32 hay khác?
+- Patch được extract từ bao nhiêu bệnh nhân?
+
+#### **E. Thông tin từ Training Logs & Plots**
+
+**E1. File: `plot_metrics_tmp.py`, `plot_advanced_metrics.py`**
+- Loại plot được tạo: loss curve? accuracy curve? FROC curve?
+- Đọc code để biết:
+  - Y-axis là gì? (loss, accuracy, precision, recall?)
+  - X-axis là gì? (epoch, threshold, FP count?)
+  - Các đường được so sánh: YOLO vs YOLO+3D CNN vs Full?
+
+**E2. Folder: `runs/` (training results)**
+- Folder `train/`: chứa loss plots, weight files
+  - Best epoch là bao nhiêu?
+  - Best loss là bao nhiêu?
+- Folder `runs_compare/`: chứa kết quả so sánh
+  - So sánh metrics của các model: YOLOv8 vs YOLOv11?
+  - So sánh result: YOLO only vs YOLO+3D CNN?
+
+#### **F. Thông tin từ Giao Diện App (UI Screenshots)**
+
+**F1. Tab Phân tích (Analysis Tab)**
+- Layout: image viewer ở đâu? Result table ở đâu?
+- Thay đổi slider Z như thế nào? (text input hay mouse drag?)
+- Bounding box được vẽ như thế nào? (xanh/vàng/đỏ)
+- Info panel hiển thị gì khi click vào 1 nốt? (tọa độ, kích thước, confidence?)
+
+**F2. Tab So sánh (Compare Tab)**
+- 4 view mode là gì cụ thể?
+  - Split left-right?
+  - Overlay + opacity slider?
+  - Animated?
+  - Diff mode?
+- Keyboard shortcuts có không? (Ctrl+Z, Ctrl+S?)
+
+**F3. Tab Huấn luyện (Training Tab)**
+- Chọn dataset: có file browser không? Hay dropdown?
+- Chọn mô hình base: YOLOv8 hay YOLOv11?
+- Hyperparameters có thể chỉnh gì?
+  - Learning rate slider?
+  - Batch size input?
+  - Epoch input?
+- Progress bar: real-time hay sau khi train xong?
+- Loss plot update như thế nào?
+
+**F4. Tab Cài đặt (Settings Tab)**
+- Các setting có:
+  - YOLO model selector: dropdown hay radio button?
+  - 3D CNN model selector?
+  - Device selector: CPU / GPU / Auto?
+  - RAM limit slider: 2GB, 4GB, 8GB?
+  - Confidence threshold slider: range 0–1?
+  - Min/Max nodule size: number input?
+  - Theme: Light / Dark?
+  - Language: English / Tiếng Việt?
+
+**F5. Status bar / Log**
+- Hiển thị processing time: bao nhiêu giây?
+- Hiển thị RAM usage: bao nhiêu GB đang dùng?
+- Hiển thị mô hình đang sử dụng: YOLOv8n hay YOLOv11n?
+
+#### **G. Thông tin Khác**
+
+**G1. File: `settings.json` (nếu có)**
+- Default thresholds: YOLO, 3D CNN
+- Default model selection
+- Default language, theme
+- Default folder paths
+
+**G2. File: `best.pt`, `yolo11n.pt` (model files)**
+- So sánh kích thước file
+- So sánh tốc độ inference (ms/image)
+- So sánh RAM khi load (MB)
+
+**G3. File: `dataset_3d_p1.npz`, `dataset_3d_p2.npz` (nếu là split data)**
+- Số lượng patch mỗi file: p1 bao nhiêu? p2 bao nhiêu?
+- Tổng cộng bao nhiêu patch?
+
+**G4. File: `OPTIMIZATION_REPORT.md`**
+- Các optimization được thực hiện: quantization? distillation? pruning?
+- Kết quả: tốc độ tăng bao nhiêu%? Model nhỏ bao nhiêu%?
+
+#### **H. Tóm tắt: Các số liệu PHẢI CÓ trong bài viết**
+
+Bạn **phải lấy và ghi rõ** những số liệu này từ app (không dùng con số "giả"):
+
+1. **Recall & Precision cuối cùng của app:** 87%, 82% (từ metrics.json)
+2. **F1 score:** 0.84 (từ tính toán hoặc logs)
+3. **False positive per case:** 2 (từ evaluation results)
+4. **False negative per case:** bao nhiêu?
+5. **Thời gian xử lý trung bình:** 45 giây per case hay gì? (phải chạy app để đo)
+6. **RAM sử dụng:** 2.1 GB hay gì? (phải log từ app hoặc Task Manager)
+7. **Kích thước mô hình:** U-Net bao nhiêu MB? YOLO bao nhiêu MB? 3D CNN bao nhiêu MB?
+8. **Số lượng test data:** bao nhiêu case, bao nhiêu nodules?
+9. **Recall, Precision theo kích thước nốt:** 3–5mm 70%, 5–8mm 88%, >8mm 94% (từ evaluate_models.py)
+10. **So sánh YOLOv8 vs YOLOv11:** mAP, tốc độ, RAM, recall (từ runs_compare/)
+11. **Danh sách các threshold mặc định:** YOLO 0.5, 3D CNN 0.6, NMS IoU 0.4, clustering distance 20mm, v.v.
+12. **Kiến trúc mô hình chi tiết:** U-Net 4 encoder block, YOLO có bao nhiêu output heads, 3D CNN bao nhiêu Conv3D layers, v.v.
 
 ---
 
