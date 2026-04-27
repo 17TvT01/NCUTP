@@ -722,6 +722,84 @@ python src/main.py
 
 ---
 
+## 14. DANH MỤC THÔNG TIN CẦN LẤY TỪ APP VÀ MÔ HÌNH ĐỂ ĐƯA VÀO BÀI
+
+Phần này rất quan trọng vì giúp bài viết không bị chung chung. Bạn nên chụp màn hình, xuất bảng số liệu, và lấy thông tin thật từ app để minh họa.
+
+### 14.1 Thông tin cần lấy từ app
+- **Ảnh giao diện chính của app:** màn hình phân tích, màn hình so sánh, màn hình huấn luyện, màn hình cài đặt
+- **Ảnh kết quả detect:** ảnh CT có bounding box nốt phổi, màu theo mức nguy hiểm
+- **Danh sách nốt phát hiện:** bảng kết quả gồm số thứ tự, vị trí, kích thước, confidence, risk level
+- **Ảnh xuất báo cáo:** JSON, bảng summary, hoặc log kết quả sau khi chạy xong
+- **Ảnh màn hình chạy thực tế:** progress bar khi đang inference, thời gian xử lý, RAM sử dụng nếu có
+
+### 14.2 Thông tin cần lấy từ mô hình AI
+- **Tên mô hình sử dụng:** U-Net, YOLOv8/YOLOv11, 3D CNN
+- **Vai trò của từng mô hình:** model nào làm segmentation, model nào detect, model nào giảm false positive
+- **Tham số chính của mô hình:** input size, batch size, số epoch, learning rate, số lớp output
+- **Kết quả huấn luyện:** loss curve, accuracy curve, mAP, Dice score, precision, recall
+- **Trọng số mô hình:** file `.pt` hoặc `.pth` đang dùng trong app
+- **So sánh mô hình:** YOLOv8 với YOLOv11, có 3D CNN và không có 3D CNN
+
+### 14.3 Sơ đồ cần có trong bài
+- **Sơ đồ kiến trúc tổng thể:** từ DICOM input đến output kết quả
+- **Sơ đồ pipeline xử lý:** load ảnh → tiền xử lý → detect → hậu xử lý → xuất kết quả
+- **Sơ đồ mô hình:** U-Net, YOLO, 3D CNN, clustering 3D
+- **Sơ đồ so sánh:** trước/sau tiền xử lý, trước/sau hậu xử lý, trước/sau clustering
+- **Sơ đồ đánh giá:** bảng hoặc hình FROC, precision-recall, confusion matrix
+
+### 14.4 Ảnh trước và sau khi tiền xử lý
+Bạn nên chuẩn bị ít nhất các ảnh sau:
+- **Ảnh gốc ban đầu:** ảnh DICOM chưa xử lý, còn nhiễu hoặc vùng ngoài phổi
+- **Ảnh sau chuẩn hóa HU:** ảnh sau khi clip và normalize
+- **Ảnh sau resize/crop:** ảnh đã đưa về kích thước chuẩn
+- **Ảnh sau tạo mask phổi:** chỉ giữ vùng phổi, bỏ background
+- **Ảnh trước/sau augmentation nếu cần:** phục vụ mô tả tập dữ liệu huấn luyện
+
+### 14.5 Ảnh trước và sau khi hậu xử lý
+Đây là phần rất nên có vì chứng minh hiệu quả của pipeline:
+- **Ảnh trước hậu xử lý:** kết quả YOLO ban đầu, thường còn nhiều false positive
+- **Ảnh sau morphological filter:** các vùng nhiễu nhỏ được loại bỏ
+- **Ảnh sau 3D CNN filter:** bỏ bớt các vùng là mạch máu hoặc rác
+- **Ảnh sau clustering 3D:** các detection trùng nhau được gom lại thành một nốt
+- **Ảnh so sánh trước/sau:** đặt cạnh nhau để thấy cải thiện rõ ràng
+
+### 14.6 Bảng số liệu nên trích từ app
+- **Số lượng ảnh CT đã xử lý:** bao nhiêu case, bao nhiêu slice
+- **Số lượng nốt phát hiện được:** tổng số, số nốt nguy hiểm, số nốt trung bình, số nốt thấp
+- **Thời gian xử lý trung bình:** mỗi case mất bao lâu
+- **RAM/GPU usage:** nếu app có log thì nên đưa vào
+- **Chỉ số đánh giá:** recall, precision, F1, mAP, Dice score
+- **So sánh trước/sau cải tiến:** trước khi có 3D CNN, sau khi có 3D CNN; trước/sau clustering
+
+### 14.7 Những ảnh nên chèn vào bài để đủ số trang
+1. Ảnh giao diện chính của app
+2. Ảnh ảnh CT gốc chưa xử lý
+3. Ảnh sau tiền xử lý và tạo mask phổi
+4. Ảnh detect trước hậu xử lý
+5. Ảnh detect sau hậu xử lý
+6. Ảnh bảng kết quả thống kê nốt
+7. Ảnh biểu đồ loss/accuracy khi huấn luyện
+8. Ảnh biểu đồ so sánh mô hình
+9. Ảnh so sánh YOLOv8 và YOLOv11
+10. Ảnh so sánh trước/sau clustering 3D
+
+### 14.8 Nơi chèn các thông tin này trong bài
+- **Phần 5:** dùng sơ đồ kiến trúc tổng thể
+- **Phần 6:** chèn ảnh tiền xử lý và mô tả dữ liệu
+- **Phần 7:** chèn đồ thị huấn luyện và bảng so sánh mô hình
+- **Phần 8:** chèn ảnh trước/sau hậu xử lý
+- **Phần 9:** chèn ảnh giao diện app
+- **Phần 10:** chèn bảng metric, đồ thị đánh giá, ảnh trước/sau cải tiến
+
+### 14.9 Gợi ý viết để không thiếu trang
+- Mỗi ảnh nên có 1 đoạn mô tả từ 5–10 dòng
+- Mỗi bảng nên có 1 đoạn nhận xét kết quả phía dưới
+- Mỗi sơ đồ nên giải thích luồng xử lý từ trái sang phải hoặc từ trên xuống dưới
+- Nếu có số liệu thật, hãy so sánh với một phiên bản baseline để bài viết dày và thuyết phục hơn
+
+---
+
 **Tổng dự kiến: 22–25 trang.** 
 
 Bạn có thể copy từng phần này vào Word/Markdown và bắt đầu viết. Nếu cần mở rộng hay có câu hỏi, cứ hỏi mình! 💪
