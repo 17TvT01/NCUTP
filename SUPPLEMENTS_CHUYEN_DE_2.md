@@ -86,9 +86,7 @@
              0.0                            1.0
 
 AUC = Area under curve
-- App (AUC=0.91): Phân biệt tốt giữa TP và FP
-- Baseline (AUC=0.78): Phân biệt kém hơn, nhiều false alarm
-```
+![ROC Curve Comparison](figures/roc_comparison.png)
 
 ---
 
@@ -368,6 +366,9 @@ Recall by Nodule Size:
 │   68%  │ 78% 88%  94%                │
 └─────────────────────────────────────┘
 ```
+**Type 2: False Positive (FP) - Nhầm Thành Nốt**
+
+![Recall by Nodule Size](figures/recall_by_size.png)
 
 **Type 2: False Positive (FP) - Nhầm Thành Nốt**
 
@@ -395,7 +396,13 @@ False Positives Breakdown:
 └──────────────────────────┘
 ```
 
+![False Positive Breakdown](figures/fp_breakdown.png)
+
 #### **10.3.2 Ảnh Minh Họa Case Sai**
+ 
+![Case: GGN false negative](figures/case_ggn_fn.png)  
+![Case: Vessel false positive](figures/case_vessel_fp.png)  
+![Case: Merged nodules error](figures/case_merge_error.png)
 
 **Case 1: Nốt GGN mờ bị bỏ sót (False Negative)**
 
