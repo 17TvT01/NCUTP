@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="480" viewBox="0 0 1000 480">
+  <style>
+    .box { fill:#ffffff; stroke:#2f855a; stroke-width:2; rx:8; }
+    .title { font: bold 16px sans-serif; fill:#1b4332; }
+    .label { font: 13px sans-serif; fill:#1b4332; }
+    .arrow { stroke:#1b4332; stroke-width:3; fill:none; marker-end:url(#a); }
+  </style>
+  <defs>
+    <marker id="a" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0,10 3.5,0 7" fill="#1b4332" />
+    </marker>
+  </defs>
+
+  <rect x="40" y="30" width="220" height="90" class="box"/>
+  <text x="150" y="55" text-anchor="middle" class="title">PACS</text>
+  <text x="150" y="75" text-anchor="middle" class="label">DICOM archive</text>
+
+  <rect x="300" y="30" width="220" height="90" class="box"/>
+  <text x="410" y="55" text-anchor="middle" class="title">Analysis App</text>
+  <text x="410" y="75" text-anchor="middle" class="label">Auto-detect + visualization</text>
+
+  <rect x="560" y="30" width="220" height="90" class="box"/>
+  <text x="670" y="55" text-anchor="middle" class="title">Radiologist</text>
+  <text x="670" y="75" text-anchor="middle" class="label">Review & edit findings</text>
+
+  <path d="M260 75 L300 75" class="arrow"/>
+  <path d="M520 75 L560 75" class="arrow"/>
+
+  <rect x="300" y="150" width="480" height="110" class="box"/>
+  <text x="540" y="175" text-anchor="middle" class="title">Report Generation</text>
+  <text x="540" y="200" text-anchor="middle" class="label">Standardized report • Export to RIS/PACS</text>
+
+  <path d="M410 120 L410 150" class="arrow"/>
+  <path d="M670 120 L670 150" class="arrow"/>
+
+  <rect x="40" y="300" width="220" height="110" class="box"/>
+  <text x="150" y="335" text-anchor="middle" class="title">Archive</text>
+  <text x="150" y="355" text-anchor="middle" class="label">Findings + DICOM links</text>
+
+  <rect x="300" y="300" width="220" height="110" class="box"/>
+  <text x="410" y="335" text-anchor="middle" class="title">Follow-up Queue</text>
+  <text x="410" y="355" text-anchor="middle" class="label">Automated scheduling</text>
+
+  <path d="M540 260 L410 300" class="arrow"/>
+  <path d="M150 260 L150 300" class="arrow"/>
+</svg>

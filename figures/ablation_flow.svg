@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="340" viewBox="0 0 1000 340">
+  <style>
+    .box { fill:#f0f9ff; stroke:#0c4a6e; stroke-width:2; rx:8; }
+    .title { font: bold 14px sans-serif; fill:#0c4a6e; }
+    .label { font: 13px sans-serif; fill:#0c4a6e; }
+    .arrow { stroke:#0c4a6e; stroke-width:3; fill:none; marker-end:url(#arr); }
+  </style>
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0,10 3.5,0 7" fill="#0c4a6e" />
+    </marker>
+  </defs>
+
+  <rect x="40" y="30" width="260" height="80" class="box"/>
+  <text x="170" y="55" text-anchor="middle" class="title">Baseline: YOLO only</text>
+  <text x="170" y="75" text-anchor="middle" class="label">mAP 52.3% • FP/case 12</text>
+
+  <rect x="360" y="30" width="260" height="80" class="box"/>
+  <text x="490" y="55" text-anchor="middle" class="title">+ U-Net preprocessing</text>
+  <text x="490" y="75" text-anchor="middle" class="label">Improve lung crop, reduce background</text>
+
+  <rect x="680" y="30" width="260" height="80" class="box"/>
+  <text x="810" y="55" text-anchor="middle" class="title">+ 3D FPR CNN</text>
+  <text x="810" y="75" text-anchor="middle" class="label">Precision +17% • FP/case ↓ to 2</text>
+
+  <path d="M300 70 L360 70" class="arrow"/>
+  <path d="M620 70 L680 70" class="arrow"/>
+
+  <rect x="260" y="140" width="480" height="120" class="box"/>
+  <text x="500" y="170" text-anchor="middle" class="title">Ablation Results</text>
+  <text x="500" y="195" text-anchor="middle" class="label">Table: sensitivity, precision, FP/case for each config</text>
+
+  <path d="M810 110 L620 140" class="arrow"/>
+</svg>

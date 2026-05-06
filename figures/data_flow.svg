@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="380" viewBox="0 0 1100 380">
+  <style>
+    .box { fill:#fff9db; stroke:#b7791f; stroke-width:2; rx:8; }
+    .title { font: bold 15px sans-serif; fill:#8a4b00; }
+    .label { font: 13px sans-serif; fill:#8a4b00; }
+    .arrow { stroke:#8a4b00; stroke-width:3; fill:none; marker-end:url(#m); }
+  </style>
+  <defs>
+    <marker id="m" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0,10 3.5,0 7" fill="#8a4b00" />
+    </marker>
+  </defs>
+
+  <rect x="30" y="30" width="220" height="80" class="box"/>
+  <text x="140" y="55" text-anchor="middle" class="title">Raw DICOM</text>
+  <text x="140" y="75" text-anchor="middle" class="label">HU, metadata</text>
+
+  <rect x="280" y="30" width="220" height="80" class="box"/>
+  <text x="390" y="55" text-anchor="middle" class="title">Preprocessing</text>
+  <text x="390" y="75" text-anchor="middle" class="label">Resample, crop, normalize</text>
+
+  <rect x="530" y="30" width="220" height="80" class="box"/>
+  <text x="640" y="55" text-anchor="middle" class="title">Augmentation</text>
+  <text x="640" y="75" text-anchor="middle" class="label">Flip, rotate, elastic, blur</text>
+
+  <rect x="780" y="30" width="220" height="80" class="box"/>
+  <text x="890" y="55" text-anchor="middle" class="title">Training Sets</text>
+  <text x="890" y="75" text-anchor="middle" class="label">Train / Val / Test (60/20/20)</text>
+
+  <path d="M250 70 L280 70" class="arrow"/>
+  <path d="M500 70 L530 70" class="arrow"/>
+  <path d="M750 70 L780 70" class="arrow"/>
+
+  <rect x="280" y="150" width="720" height="160" class="box"/>
+  <text x="640" y="180" text-anchor="middle" class="title">Model Training & Evaluation</text>
+  <text x="640" y="205" text-anchor="middle" class="label">UNet → YOLO → 3D CNN • metrics, logs, checkpoints</text>
+  <text x="640" y="225" text-anchor="middle" class="label">Logging: wandb / tensorboard</text>
+
+  <path d="M890 110 L890 150" class="arrow"/>
+</svg>

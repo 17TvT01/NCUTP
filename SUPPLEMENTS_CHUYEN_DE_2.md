@@ -10,6 +10,8 @@
 
 Để chứng minh hiệu quả của pipeline, chúng tôi đánh giá trên tập test độc lập với 50 case (1000+ nốt).
 
+![Pipeline overview](figures/pipeline_diagram.svg)
+
 #### **9.5.1 Các Metric Chính**
 
 | Metric | Công thức | Giá trị | Ghi chú |
@@ -97,6 +99,8 @@ AUC = Area under curve
 
 Pipeline có nhiều bước, chúng tôi kiểm tra đóng góp của mỗi bước:
 
+![Ablation Flow](figures/ablation_flow.svg)
+
 #### **10.2.1 Bảng Ablation Study Chi Tiết**
 
 | # | Cấu hình | U-Net | YOLO | 3D CNN | Morph | Clust | Sensitivity | Precision | FP/scan | Nhận xét |
@@ -164,6 +168,8 @@ Split strategy: Stratified by patient (để tránh data leak)
 Lý do: Chia theo patient (không slice) để tránh model thấy
 cùng một người bệnh ở train lẫn test → không leak thông tin
 ```
+
+![Data flow and training pipeline](figures/data_flow.svg)
 
 #### **7.X.2 Data Augmentation (Tăng Cường Dữ Liệu)**
 
@@ -503,6 +509,8 @@ AI Role: "First Pass Screening" or "Second Reader"
 - Reduce missed detections (alert on high-risk)
 - Not replace radiologist (always human confirm)
 ```
+
+![Clinical workflow](figures/clinical_workflow.svg)
 
 #### **Processing Time Metrics**
 

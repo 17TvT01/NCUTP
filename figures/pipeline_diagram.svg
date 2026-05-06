@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420">
+  <style>
+    .box { fill:#ffffff; stroke:#2b6cb0; stroke-width:2; rx:8; }
+    .title { font: bold 18px sans-serif; fill:#0b3a66; }
+    .label { font: 14px sans-serif; fill:#0b3a66; }
+    .arrow { stroke:#2b6cb0; stroke-width:3; fill:none; marker-end:url(#arrowhead); }
+  </style>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2b6cb0" />
+    </marker>
+  </defs>
+  <!-- Boxes -->
+  <rect x="40" y="40" width="220" height="120" class="box"/>
+  <text x="150" y="75" text-anchor="middle" class="title">Input DICOM</text>
+  <text x="150" y="100" text-anchor="middle" class="label">HU normalization, resample</text>
+
+  <rect x="310" y="40" width="220" height="120" class="box"/>
+  <text x="420" y="75" text-anchor="middle" class="title">U-Net Lung Mask</text>
+  <text x="420" y="100" text-anchor="middle" class="label">Segmentation, lung crop</text>
+
+  <rect x="580" y="40" width="220" height="120" class="box"/>
+  <text x="690" y="75" text-anchor="middle" class="title">YOLO Detector</text>
+  <text x="690" y="100" text-anchor="middle" class="label">2D nodule proposals</text>
+
+  <rect x="850" y="40" width="220" height="120" class="box"/>
+  <text x="960" y="75" text-anchor="middle" class="title">3D FPR CNN</text>
+  <text x="960" y="100" text-anchor="middle" class="label">Voxel patch classification</text>
+
+  <!-- arrows -->
+  <path d="M260 100 L310 100" class="arrow"/>
+  <path d="M530 100 L580 100" class="arrow"/>
+  <path d="M800 100 L850 100" class="arrow"/>
+
+  <!-- Post-processing -->
+  <rect x="350" y="200" width="500" height="120" class="box"/>
+  <text x="600" y="235" text-anchor="middle" class="title">Post-processing</text>
+  <text x="600" y="260" text-anchor="middle" class="label">Morphological filter • Clustering • Diameter estimation</text>
+
+  <path d="M960 100 L600 200" class="arrow"/>
+  <path d="M690 160 L690 200" class="arrow"/>
+
+  <!-- Output -->
+  <rect x="920" y="330" width="240" height="60" class="box"/>
+  <text x="1040" y="360" text-anchor="middle" class="title">Report JSON</text>
+  <text x="1040" y="380" text-anchor="middle" class="label">coords, diameter, confidence, risk</text>
+
+  <path d="M600 320 L920 330" class="arrow"/>
+</svg>
