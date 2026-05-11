@@ -503,7 +503,7 @@ Target achieved: <2 min GPU, <8 min CPU
 
 For each metric, compute **95% CI** using Wilson score interval or bootstrap:
 
-$$\mathrm{CI}_{95\%} = \hat{p} \pm z_{0.975} \sqrt{\frac{\hat{p}(1-\hat{p})}{n}}$$
+$$\mathrm{CI}_{0.95} = \hat{p} \pm z_{0.975} \sqrt{\frac{\hat{p}(1-\hat{p})}{n}}$$
 
 where:
 - $\hat{p}$ = observed proportion (e.g., TP/(TP+FN))
