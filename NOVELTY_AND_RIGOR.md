@@ -211,15 +211,15 @@ For each box edge (left, right, top, bottom), DFL regresses distribution instead
 
 #### CSA-Enhanced Loss:
 
-$$L_{\text{total}}^{\text{CSA}} = L_{\text{base}} + \lambda_{\text{csa}} \cdot L_{\text{csa}}$$
+$$L_{\mathrm{total}}^{\mathrm{CSA}} = L_{\mathrm{base}} + \lambda_{\mathrm{CSA}} \cdot L_{\mathrm{CSA}}$$
 
 where:
 
-$$L_{\text{csa}} = \text{MSE}(c_{\text{refined}}, y) + \beta \cdot L_{\text{temporal\_smooth}}$$
+$$L_{\mathrm{CSA}} = \mathrm{MSE}(c_{\mathrm{refined}}, y) + \beta \cdot L_{\text{temporal smooth}}$$
 
 - First term: MSE between refined confidence and ground truth
 - Second term: temporal consistency (penalize large Δconf between consecutive frames)
-- $\lambda_{\text{csa}} = 0.1$ (weighting factor)
+- $\lambda_{\mathrm{CSA}} = 0.1$ (weighting factor)
 - $\beta = 0.05$ (temporal smoothness weight)
 
 ### 2.2 3D CNN Architecture (Detailed)
@@ -921,35 +921,6 @@ Follow **TRIPOD** (Transparent Reporting of Evaluations with Nonlinear Models) g
 | **Generalization** | 5-fold CV + variance analysis | Section 6 |
 | **Computational complexity** | FLOPs, latency, memory breakdown | Section 3 |
 
----
-
-## IMPLEMENTATION ROADMAP
-
-**Phase 1 (Week 1-2):** Implement & benchmark CSA module
-```bash
-python implement_csa_module.py
-python evaluate_ablation.py
-```
-
-**Phase 2 (Week 2-3):** Statistical analysis
-```bash
-python statistical_analysis.py
-python cross_validation.py
-```
-
-**Phase 3 (Week 3-4):** Clinical study design & SOTA comparison
-```bash
-python reader_study_protocol.py
-python sota_comparison.py
-```
-
-**Phase 4 (Week 4):** Write-up & finalization
-```bash
-# Generate all figures, tables, confidence intervals
-python generate_final_report.py
-```
-
----
 
 **Total Pages Added:** ~40 pages (detailed mathematical formulation + analysis)
 **Total Thesis Length:** ~75 pages (framework + supplements + novelty)
