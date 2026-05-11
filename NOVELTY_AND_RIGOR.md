@@ -493,7 +493,7 @@ Target achieved: <2 min GPU, <8 min CPU
 
 | Metric | Formula | Note |
 |--------|---------|------|
-| **FP per case** | $\frac{\text{# false positives}}{\text{# cases}}$ | Target: <2.1 |
+| **FP per case** | $\frac{\text{false positives}}{\text{cases}}$ | Target: <2.1 |
 | **Sensitivity by size** | Recall for <3mm, 3-5mm, 5-8mm, >8mm | Monotonic increase expected |
 | **FROC** | Free-response Operating Characteristic | AUC_FROC target: >0.85 |
 
@@ -503,7 +503,7 @@ Target achieved: <2 min GPU, <8 min CPU
 
 For each metric, compute **95% CI** using Wilson score interval or bootstrap:
 
-$$\text{CI}_{95\%} = \hat{p} \pm z_{0.975} \sqrt{\frac{\hat{p}(1-\hat{p})}{n}}$$
+$$\mathrm{CI}_{95\%} = \hat{p} \pm z_{0.975} \sqrt{\frac{\hat{p}(1-\hat{p})}{n}}$$
 
 where:
 - $\hat{p}$ = observed proportion (e.g., TP/(TP+FN))
@@ -796,12 +796,12 @@ Phase 4: Time Analysis
 
 **Agreement:**
 
-$$\text{Agreement} = \frac{\text{# concordant cases}}{\text{total cases}}$$
+$$\mathrm{Agreement} = \frac{\text{concordant cases}}{\text{total cases}}$$
 
 **Per-nodule metrics:**
 
-- **Sensitivity vs. consensus:** $\frac{\text{# AI-detected nodules confirmed}}{\text{# consensus nodules}}$
-- **Specificity vs. consensus:** $\frac{\text{# AI non-detections confirmed}}{\text{# consensus non-nodules}}$
+- **Sensitivity vs. consensus:** $\frac{\text{AI-detected nodules confirmed}}{\text{consensus nodules}}$
+- **Specificity vs. consensus:** $\frac{\text{AI non-detections confirmed}}{\text{consensus non-nodules}}$
 
 **Per-case metrics:**
 
@@ -855,7 +855,7 @@ $$\chi^2 = \frac{(a-d)^2}{a+d} \sim \chi^2_1$$
 
 When testing multiple components (ablation study), apply **Bonferroni correction**:
 
-$$\alpha_{\text{corrected}} = \frac{\alpha}{\text{# comparisons}} = \frac{0.05}{7} = 0.0071$$
+$$\alpha_{\mathrm{corrected}} = \frac{\alpha}{\mathrm{comparisons}} = \frac{0.05}{7} = 0.0071$$
 
 All p-values < 0.0071 considered significant (stricter threshold).
 
